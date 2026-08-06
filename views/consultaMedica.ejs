@@ -1003,5 +1003,51 @@
             </div>
         </div>
     </div>
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- 1. Referencias a los elementos ---
+    const modalCalendario = document.getElementById('modalCalendario');
+    const btnCalendario = document.getElementById('btnCalendario');
+    const btnCerrarCalendario = document.getElementById('btnCerrarCalendario');
+    const btnNuevaConsulta = document.getElementById('btnNuevaConsulta');
+
+    // --- 2. Funciones de Control de Modales ---
+    const abrirModal = (modal) => {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    };
+
+    const cerrarModal = (modal) => {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    };
+
+    // --- 3. Event Listeners ---
+    if (btnCalendario) {
+        btnCalendario.addEventListener('click', () => abrirModal(modalCalendario));
+    }
+
+    if (btnCerrarCalendario) {
+        btnCerrarCalendario.addEventListener('click', () => cerrarModal(modalCalendario));
+    }
+
+    // Cerrar modal si hacen click fuera del contenido
+    window.addEventListener('click', (event) => {
+        if (event.target === modalCalendario) {
+            cerrarModal(modalCalendario);
+        }
+    });
+
+    if (btnNuevaConsulta) {
+        btnNuevaConsulta.addEventListener('click', () => {
+            // Aquí puedes redirigir a una ruta de tu backend, por ejemplo:
+            window.location.href = '/consultas/nueva'; 
+        });
+    }
+
+    // --- 4. Ejemplo de interaccion basica ---
+    console.log("Sistema de Consultas Roca Maya - Interfaz cargada correctamente.");
+});
+</script>
 </body>
 </html>
