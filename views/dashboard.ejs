@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLINICAS ROCA MAYA</title>
+  <link rel="icon" href="/ICONO.jpg" type="image/jpeg">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <style>
+    /* ============================================================
+       ESTILOS BASE
+       ============================================================ */
+    #userDropdown {
+      position: fixed !important;
+      z-index: 999999 !important;
+      display: none !important;
+      min-width: 280px !important;
+      max-width: 320px !important;
+      border-radius: 12px !important;
+      box-shadow: 0 10px 50px rgba(0,0,0,0.25) !important;
+      border: none !important;
+      background: white !important;
+      max-height: 90vh !important;
+      overflow-y: auto !important;
+    }
+    #userDropdown.show {
+      display: block !important;
+    }
+    .welcome-area {
+      position: relative !important;
+      z-index: 9999 !important;
+      overflow: visible !important;
+    }
+    .sidebar-item.oculto {
+      display: none !important;
+    }
+    .sidebar-category.oculto {
+      display: none !important;
+    }
+
+    /* ============================================================
+       MODAL DE BLOQUEO CON FORMULARIO INTEGRADO
+       ============================================================ */
+    .modal-bloqueo {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 9999999 !important;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      pointer-events: all !important;
+      overflow: hidden;
+    }
+    .modal-bloqueo.active {
+      display: flex !important;
+    }
+    
+    .modal-bloqueo .modal-content-bloqueo {
+      background: white;
+      max-width: 480px;
+      width: 95%;
+      padding: 35px 30px;
+      border-radius: 24px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+      position: relative;
+      animation: modalFadeIn 0.5s ease-out;
+      z-index: 10000000 !important;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9) translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    
+    .modal-bloqueo .modal-content-bloqueo .icono {
+      font-size: 4rem;
+      color: #dc3545;
+      margin-bottom: 10px;
+      display: block;
+      text-align: center;
+    }
+    .modal-bloqueo .modal-content-bloqueo h2 {
+      color: #023047;
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 1.4rem;
+      text-align: center;
+    }
+    .modal-bloqueo .modal-content-bloqueo .subtitle {
+      color: #495057;
+      font-size: 0.95rem;
+      margin-bottom: 20px;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .modal-bloqueo .modal-content-bloqueo .subtitle strong {
+      color: #023047;
+    }
+
+    /* Estilos del formulario dentro del modal */
+    .modal-bloqueo .modal-content-bloqueo .form-group {
+      margin-bottom: 15px;
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: #023047;
+      margin-bottom: 4px;
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .input-group {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .input-group input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      transition: border-color 0.2s;
+      padding-right: 40px;
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .input-group input:focus {
+      border-color: #219ebc;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(33,158,188,0.2);
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .input-group input.is-invalid {
+      border-color: #dc3545;
+      box-shadow: 0 0 0 3px rgba(220,53,69,0.2);
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .input-group input.is-valid {
+      border-color: #28a745;
+      box-shadow: 0 0 0 3px rgba(40,167,69,0.2);
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .toggle-password-modal {
+      position: absolute;
+      right: 10px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: #6c757d;
+      font-size: 1.1rem;
+      padding: 5px;
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-group .toggle-password-modal:hover {
+      color: #333;
+    }
+    .modal-bloqueo .modal-content-bloqueo .form-text {
+      font-size: 0.75rem;
+      color: #6c757d;
+      margin-top: 4px;
+    }
+    .modal-bloqueo .modal-content-bloqueo .alert {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+    .modal-bloqueo .modal-content-bloqueo .alert-danger {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+    .modal-bloqueo .modal-content-bloqueo .alert-success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+    .modal-bloqueo .modal-content-bloqueo .btn-cambiar {
+      background: #219ebc;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 50px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 10px;
+      box-shadow: 0 4px 15px rgba(33, 158, 188, 0.3);
+    }
+    .modal-bloqueo .modal-content-bloqueo .btn-cambiar:hover {
+      background: #1a7a94;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(33, 158, 188, 0.5);
+    }
+    .modal-bloqueo .modal-content-bloqueo .btn-cambiar:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .modal-bloqueo .modal-content-bloqueo .btn-cambiar i {
+      margin-right: 8px;
+    }
+
+    /* ============================================================
+       BLOQUEO TOTAL DEL CONTENIDO PRINCIPAL
+       ============================================================ */
+    body.modal-bloqueo-activo {
+      overflow: hidden !important;
+    }
+    
+    body.modal-bloqueo-activo .main-content,
+    body.modal-bloqueo-activo .top-bar,
+    body.modal-bloqueo-activo .container,
+    body.modal-bloqueo-activo .header,
+    body.modal-bloqueo-activo .footer,
+    body.modal-bloqueo-activo .history-section,
+    body.modal-bloqueo-activo .stats-card,
+    body.modal-bloqueo-activo .row,
+    body.modal-bloqueo-activo .col-md-3,
+    body.modal-bloqueo-activo .col-sm-6,
+    body.modal-bloqueo-activo .welcome-area,
+    body.modal-bloqueo-activo .logo-small,
+    body.modal-bloqueo-activo .user-avatar-dropdown,
+    body.modal-bloqueo-activo .text-start,
+    body.modal-bloqueo-activo .sidebar-modal,
+    body.modal-bloqueo-activo .modal-overlay,
+    body.modal-bloqueo-activo #userDropdownContainer,
+    body.modal-bloqueo-activo #userMenuButton {
+      pointer-events: none !important;
+      user-select: none !important;
+      opacity: 0.2 !important;
+      filter: blur(4px) !important;
+      -webkit-filter: blur(4px) !important;
+    }
+    
+    body.modal-bloqueo-activo .modal-bloqueo {
+      pointer-events: all !important;
+      display: flex !important;
+      opacity: 1 !important;
+      filter: none !important;
+    }
+    
+    body.modal-bloqueo-activo .modal-bloqueo .modal-content-bloqueo {
+      pointer-events: all !important;
+      opacity: 1 !important;
+      filter: none !important;
+    }
+    
+    body.modal-bloqueo-activo .modal-bloqueo .modal-content-bloqueo * {
+      pointer-events: all !important;
+    }
+
+    /* ============================================================
+       RESPONSIVE
+       ============================================================ */
+    @media (max-width: 576px) {
+      .modal-bloqueo .modal-content-bloqueo {
+        padding: 25px 20px;
+        max-width: 98%;
+      }
+      .modal-bloqueo .modal-content-bloqueo h2 {
+        font-size: 1.2rem;
+      }
+      .modal-bloqueo .modal-content-bloqueo .icono {
+        font-size: 3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       MODAL DE BLOQUEO CON FORMULARIO DE CAMBIO DE CONTRASEÑA
+       ============================================================ -->
+  <div class="modal-bloqueo" id="modalBloqueoPrimerIngreso">
+    <div class="modal-content-bloqueo">
+      <span class="icono"><i class="fas fa-lock"></i></span>
+      <h2>🔒 Cambio de contraseña requerido</h2>
+      <p class="subtitle">
+        Bienvenido, <strong><%= nombreUsuario %></strong>.<br>
+        Por seguridad, debes <strong>cambiar tu contraseña</strong> antes de continuar usando el sistema.
+      </p>
+
+      <!-- Formulario de cambio de contraseña -->
+      <form id="formCambioPasswordModal" class="d-flex flex-column gap-2">
+        <!-- Contraseña Actual -->
+        <div class="form-group">
+          <label for="currentPasswordModal">Contraseña Actual</label>
+          <div class="input-group">
+            <input type="password" id="currentPasswordModal" placeholder="Ingresa tu contraseña actual" required>
+            <button type="button" class="toggle-password-modal" data-target="currentPasswordModal">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Nueva Contraseña -->
+        <div class="form-group">
+          <label for="newPasswordModal">Nueva Contraseña</label>
+          <div class="input-group">
+            <input type="password" id="newPasswordModal" placeholder="Mínimo 9 caracteres" required>
+            <button type="button" class="toggle-password-modal" data-target="newPasswordModal">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+          <div class="form-text"> Debe tener entre 9 y 15 caracteres, incluir letras, números y un símbolo (@$!%*#?&)</div>
+        </div>
+
+        <!-- Confirmar Nueva Contraseña -->
+        <div class="form-group">
+          <label for="confirmNewPasswordModal">Confirmar Nueva Contraseña</label>
+          <div class="input-group">
+            <input type="password" id="confirmNewPasswordModal" placeholder="Repite tu nueva contraseña" required>
+            <button type="button" class="toggle-password-modal" data-target="confirmNewPasswordModal">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Mensajes de error/éxito -->
+        <div id="passwordChangeErrorModal" class="alert alert-danger d-none"></div>
+        <div id="passwordChangeSuccessModal" class="alert alert-success d-none"></div>
+
+        <!-- Botón de envío -->
+        <button type="submit" class="btn-cambiar" id="btnCambiarPasswordModal">
+          <i class="fas fa-save"></i> Cambiar Contraseña
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 15px;">
+        <a href="/auth/logout" style="color: #6c757d; font-size: 0.85rem; text-decoration: none;">
+          <i class="fas fa-sign-out-alt"></i> Cerrar sesión
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       EL RESTO DEL DASHBOARD (se mantiene igual, pero todo bloqueado)
+       ============================================================ -->
+  <!-- Modal Sidebar -->
+  <div class="sidebar-modal" id="sidebarModal">
+    <div class="sidebar-header">
+        <h6>Menú Principal</h6>
+        <h8>
+            Bienvenido, <%= nombreUsuario %>
+            <span class="badge bg-primary ms-2" style="font-size: 0.7rem;">
+                <i class="fas fa-user-tag me-1"></i><%= rol %>
+            </span>
+        </h8>
+        <button class="close-sidebar" id="closeSidebar">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="sidebar-content" id="sidebarContent">
+      <!-- ==================== SERVICIOS ==================== -->
+      <div class="sidebar-category" data-categoria="servicios">SERVICIOS</div>
+      
+      <a href="/citas" class="sidebar-item" data-objeto-id="1">
+        <i class="fas fa-calendar-check"></i>
+        <span>Citas médicas</span>
+      </a>
+      
+      <a href="/consulta" class="sidebar-item" data-objeto-id="2">
+        <i class="fas fa-stethoscope"></i>
+        <span>Consultas Médicas</span>
+      </a>
+      
+      <a href="/preclinica" class="sidebar-item" data-objeto-id="3">
+        <i class="fas fa-hospital-user"></i>
+        <span>Preclínica</span>
+      </a>
+      
+      <a href="/especialidades" class="sidebar-item" data-objeto-id="4">
+        <i class="fas fa-flask"></i>
+        <span>Especialidades Médicas</span>
+      </a>
+      
+      <!-- ==================== ADMINISTRACIÓN ==================== -->
+      <div class="sidebar-category" data-categoria="administracion">ADMINISTRACIÓN</div>
+      
+      <a href="/pacientes" class="sidebar-item" data-objeto-id="5">
+        <i class="fas fa-user-injured"></i>
+        <span>Pacientes</span>
+      </a>
+      
+      <a href="/historial" class="sidebar-item" data-objeto-id="6">
+        <i class="fas fa-file-medical"></i>
+        <span>Historial médico</span>
+      </a>
+      
+      <!-- ==================== SEGURIDAD ==================== -->
+      <div class="sidebar-category" data-categoria="seguridad">SEGURIDAD</div>
+      
+      <a href="/bitacora" class="sidebar-item" data-objeto-id="7">
+        <i class="fas fa-book"></i>
+        <span>Bitácora</span>
+      </a>
+      
+      <a href="/users" class="sidebar-item" data-objeto-id="8">
+        <i class="fas fa-users-cog"></i>
+        <span>Usuarios</span>
+      </a>
+      
+      <a href="/bitacora/parametros/backup" class="sidebar-item" data-objeto-id="9">
+        <i class="fas fa-download"></i>
+        <span>Respaldo de Base de Datos</span>
+      </a>
+
+      <button type="button" id="btnRestore" class="sidebar-item" data-objeto-id="10" style="background: none; border: none; width: 100%; text-align: left; cursor: pointer;">
+        <i class="fas fa-upload"></i>
+        <span>Restaurar Base de Datos</span>
+      </button>
+      <input type="file" id="fileRestore" accept=".sql" style="display: none;">
+      
+      <a href="/parametros" class="sidebar-item" data-objeto-id="11" style="text-decoration: none; display: flex; align-items: center; gap: 10px;">
+        <i class="fas fa-shield-alt"></i>
+        <span>Parámetros de Seguridad</span>
+      </a>
+      
+      <!-- ==================== FARMACIA ==================== -->
+      <div class="sidebar-category" data-categoria="farmacia">FARMACIA</div>
+      
+      <a href="/inventario" class="sidebar-item" data-objeto-id="12">
+        <i class="fas fa-pills"></i>
+        <span>Farmacia / Inventario</span>
+      </a>
+      
+      <!-- ==================== CERRAR SESIÓN ==================== -->
+      <div class="sidebar-divider"></div>
+      <a href="/auth/logout" class="sidebar-item logout-item">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Cerrar Sesión</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- OVERLAY -->
+  <div class="modal-overlay" id="modalOverlay"></div>
+
+  <!-- Main Content -->
+  <div class="main-content" id="mainContent">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <button class="menu-toggle" id="menuToggle">
+        <i class="fas fa-bars"></i>
+        Menú
+      </button>
+      <div class="welcome-area d-flex align-items-center gap-3">
+       
+        <!-- ============================================================ -->
+        <!-- MENÚ DESPLEGABLE DE USUARIO (se mantiene pero bloqueado) -->
+        <!-- ============================================================ -->
+        <div class="dropdown d-inline-block" id="userDropdownContainer" style="position: relative; z-index: 99999; overflow: visible;">
+          <button class="btn btn-link text-decoration-none p-0" id="userMenuButton" type="button" style="color: #333; position: relative; z-index: 99999;">
+            <div class="d-flex align-items-center gap-2">
+              <div class="user-avatar-dropdown">
+                <i class="fas fa-user-circle" style="font-size: 2.2rem; color: #1a5276;"></i>
+              </div>
+              <div class="text-start d-none d-sm-block">
+                <span class="fw-semibold small" style="color: #1a5276;"><%= nombreUsuario %></span>
+                <br>
+                <small class="text-muted" style="font-size: 0.7rem;"><%= email || 'Sin correo' %></small>
+              </div>
+              <i class="fas fa-chevron-down ms-1" style="font-size: 0.7rem; color: #6c757d;"></i>
+            </div>
+          </button>
+          
+          <!-- Dropdown (se mantiene pero no es necesario para el primer ingreso) -->
+          <div class="dropdown-menu dropdown-menu-end p-0" id="userDropdown">
+            <div class="p-3" style="background: linear-gradient(135deg, #1a5276, #2e86c1); border-radius: 12px 12px 0 0;">
+              <div class="d-flex align-items-center gap-3">
+                <div class="user-avatar-lg" style="width: 55px; height: 55px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.8rem; flex-shrink: 0;">
+                  <i class="fas fa-user"></i>
+                </div>
+                <div style="color: white; min-width: 0;">
+                  <h6 class="mb-0" style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><%= nombreUsuario %></h6>
+                  <small style="opacity: 0.8; font-size: 0.75rem;"><%= email || 'Sin correo electrónico' %></small>
+                  <br>
+                  <span class="badge" style="background: rgba(255,255,255,0.2); font-size: 0.6rem; padding: 2px 8px;"><%= rol %></span>
+                </div>
+              </div>
+            </div>
+            <div class="px-3 pt-2">
+              <small class="text-muted text-uppercase" style="font-size: 0.6rem; font-weight: 600; letter-spacing: 0.5px;">Área personal</small>
+            </div>
+            <button class="dropdown-item d-flex align-items-center gap-3 px-3 py-2 config-option active" data-option="perfil" style="font-size: 0.85rem; border: none; width: 100%; text-align: left; background: #f0f7ff; border-left: 3px solid #1a5276; cursor: pointer;">
+              <i class="fas fa-user-circle" style="width: 18px; color: #1a5276; font-size: 1rem;"></i>
+              <span>Perfil</span>
+              <span class="ms-auto text-muted small" style="font-size: 0.65rem;"><%= usuario %></span>
+            </button>
+            <div class="dropdown-item d-flex align-items-center gap-3 px-3 py-2" style="font-size: 0.85rem; opacity: 0.5; cursor: default; border: none; width: 100%; text-align: left; background: transparent;">
+              <i class="fas fa-calendar-alt" style="width: 18px; color: #6c757d; font-size: 1rem;"></i>
+              <span>Calendario</span>
+              <span class="badge bg-secondary ms-auto" style="font-size: 0.5rem;">Próximamente</span>
+            </div>
+            <div class="dropdown-divider my-1"></div>
+            <div class="px-3 pt-1">
+              <small class="text-muted text-uppercase" style="font-size: 0.6rem; font-weight: 600; letter-spacing: 0.5px;">Preferencias</small>
+            </div>
+            <button class="dropdown-item d-flex align-items-center gap-3 px-3 py-2 config-option" data-option="password" style="font-size: 0.85rem; border: none; width: 100%; text-align: left; background: transparent; cursor: pointer;">
+              <i class="fas fa-key" style="width: 18px; color: #1a5276; font-size: 1rem;"></i>
+              <span>Cambiar Contraseña</span>
+              <i class="fas fa-chevron-right ms-auto" style="font-size: 0.6rem; color: #6c757d;"></i>
+            </button>
+            <div class="dropdown-item d-flex align-items-center gap-3 px-3 py-2" style="font-size: 0.85rem; opacity: 0.5; cursor: default; border: none; width: 100%; text-align: left; background: transparent;">
+              <i class="fas fa-bell" style="width: 18px; color: #6c757d; font-size: 1rem;"></i>
+              <span>Notificaciones</span>
+              <span class="badge bg-secondary ms-auto" style="font-size: 0.5rem;">Próximamente</span>
+            </div>
+            <div class="dropdown-divider my-1"></div>
+            <a href="/auth/logout" class="dropdown-item d-flex align-items-center gap-3 px-3 py-2 text-danger" style="font-size: 0.85rem; border-top: 1px solid #f0f0f0; text-decoration: none;">
+              <i class="fas fa-sign-out-alt" style="width: 18px; font-size: 1rem;"></i>
+              <span>Cerrar sesión</span>
+            </a>
+            <div id="dropdownContentContainer" class="border-top p-3" style="background: #fafafa; border-radius: 0 0 12px 12px; min-height: 150px; border-top: 1px solid #e9ecef;">
+              <div id="dropdownPerfil" style="display: block;">
+                <div class="d-flex flex-column gap-2">
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <span class="text-muted small">Usuario</span>
+                    <span class="fw-semibold small"><%= usuario %></span>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <span class="text-muted small">Nombre</span>
+                    <span class="fw-semibold small"><%= nombreUsuario %></span>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <span class="text-muted small">Rol</span>
+                    <span class="fw-semibold small"><%= rol %></span>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1">
+                    <span class="text-muted small">Correo</span>
+                    <span class="fw-semibold small"><%= email || 'No registrado' %></span>
+                  </div>
+                </div>
+              </div>
+              <div id="dropdownPassword" style="display: none;">
+                <!-- El formulario dentro del dropdown ya no se usa para primer ingreso,
+                     pero se mantiene por si el usuario accede desde el perfil normal -->
+                <form id="formCambioPassword" class="d-flex flex-column gap-2">
+                  <div class="position-relative">
+                    <label class="small text-muted mb-1">Contraseña Actual</label>
+                    <div class="input-group" style="height: 35px;">
+                      <input type="password" class="form-control form-control-sm" id="currentPassword" placeholder="••••••••" required style="font-size: 0.85rem; border-right: none;">
+                      <button class="btn btn-outline-secondary btn-sm toggle-password-config" type="button" data-target="currentPassword" style="border-left: none; background: #fff; z-index: 2;">
+                        <i class="fas fa-eye" style="font-size: 0.8rem;"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="position-relative">
+                    <label class="small text-muted mb-1">Nueva Contraseña</label>
+                    <div class="input-group" style="height: 35px;">
+                      <input type="password" class="form-control form-control-sm" id="newPassword" placeholder="••••••••" required style="font-size: 0.85rem; border-right: none;">
+                      <button class="btn btn-outline-secondary btn-sm toggle-password-config" type="button" data-target="newPassword" style="border-left: none; background: #fff; z-index: 2;">
+                        <i class="fas fa-eye" style="font-size: 0.8rem;"></i>
+                      </button>
+                    </div>
+                    <small class="text-muted" style="font-size: 0.65rem;">9-15 caracteres</small>
+                  </div>
+                  <div class="position-relative">
+                    <label class="small text-muted mb-1">Confirmar Contraseña</label>
+                    <div class="input-group" style="height: 35px;">
+                      <input type="password" class="form-control form-control-sm" id="confirmNewPassword" placeholder="••••••••" required style="font-size: 0.85rem; border-right: none;">
+                      <button class="btn btn-outline-secondary btn-sm toggle-password-config" type="button" data-target="confirmNewPassword" style="border-left: none; background: #fff; z-index: 2;">
+                        <i class="fas fa-eye" style="font-size: 0.8rem;"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="passwordChangeError" class="alert alert-danger d-none" style="font-size: 0.75rem; padding: 6px 10px; margin: 0;"></div>
+                  <div id="passwordChangeSuccess" class="alert alert-success d-none" style="font-size: 0.75rem; padding: 6px 10px; margin: 0;"></div>
+                  <button type="submit" class="btn btn-primary btn-sm w-100 mt-1" id="btnCambiarPassword" style="font-size: 0.85rem; padding: 6px 0; border-radius: 6px;">
+                    <i class="fas fa-save me-1"></i>Cambiar Contraseña
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <img src="/roca-maya-oct.jpg" alt="Logo Roca Maya" class="logo-small" />
+      </div>
+    </div>
+
+    <!-- Header -->
+    <h1 class="fw-bold mb-4 text-gradient text-center">Clínicas Médicas Roca Maya</h1>
+    <div class="row justify-content-center mb-5">
+      <div class="col-md-8 text-center">
+        <p class="lead text-muted">Tu salud es nuestra seguridad.</p>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="container mb-5">
+      <div class="row">
+        
+        <% if (rol === 'ADMINISTRADOR' || rol === 'ENFERMERA') { %>
+        <div class="col-md-3 col-sm-6">
+          <div class="stats-card">
+            <div class="stats-icon patients">
+              <i class="fas fa-user-injured"></i>
+            </div>
+            <div class="stats-number"><%= stats.pacientes %></div>
+            <div class="stats-label">Pacientes Activos</div>
+          </div>
+        </div>
+        <% } %>
+        
+        <% if (rol === 'ADMINISTRADOR' || rol === 'RECEPCIONISTA') { %>
+        <div class="col-md-3 col-sm-6">
+          <div class="stats-card">
+            <div class="stats-icon appointments">
+              <i class="fas fa-calendar-check"></i>
+            </div>
+            <div class="stats-number"><%= stats.citasHoy %></div>
+            <div class="stats-label">Citas Hoy</div>
+          </div>
+        </div>
+        <% } %>
+        
+        <% if (rol === 'ADMINISTRADOR' || rol === 'DOCTOR') { %>
+        <div class="col-md-3 col-sm-6">
+          <div class="stats-card">
+            <div class="stats-icon consultations">
+              <i class="fas fa-stethoscope"></i>
+            </div>
+            <div class="stats-number"><%= stats.consultasDiarias %></div>
+            <div class="stats-label">Consultas Diarias</div>
+          </div>
+        </div>
+        <% } %>
+        
+        <% if (rol === 'ADMINISTRADOR') { %>
+        <div class="col-md-3 col-sm-6">
+          <div class="stats-card">
+            <div class="stats-icon pharmacy">
+              <i class="fas fa-pills"></i>
+            </div>
+            <div class="stats-number"><%= stats.medicamentos %></div>
+            <div class="stats-label">Medicamentos</div>
+          </div>
+        </div>
+        <% } %>
+        
+      </div>
+    </div>
+
+    <!-- Reseña Histórica -->
+    <div class="container">
+      <div class="history-section">
+        <div class="history-header">
+          <div class="history-icon">
+            <i class="fas fa-history"></i>
+          </div>
+          <h3 class="mb-0">Nuestra Historia</h3>
+        </div>
+        <div class="history-content">
+          <p>En el año 2014, el Doctor Francisco llegó a Santa Rita, Copán, con un sueño claro: brindar atención médica de calidad en una comunidad trabajadora y honorable. Durante tres años, se desempeñó en el centro de salud local, donde fue testigo de las necesidades urgentes de los habitantes, especialmente cuando las instalaciones públicas cerraban y dejaban a muchos sin opciones.</p>
+          <p>Fue así como nació su visión: una clínica accesible, eficiente y comprometida con la salud de su gente. Con determinación y esfuerzo, invirtió sus recursos y conocimientos para materializar ese proyecto. En 2018, abrió las puertas de Roca Maya, comenzando con una sucursal en Villanueva, Cortés, especializada en emergencias 24 horas.</p>
+          <p>Sin embargo, su corazón siempre estuvo en Santa Rita, por lo que pronto trasladó su sede principal al corazón del pueblo, cerca del parque central, donde la clínica se convirtió en un referente de confianza.</p>
+          <p>Hoy, Clínicas Médicas Roca Maya continúa creciendo y expandiendo sus servicios, manteniendo siempre el compromiso con la comunidad que le vio nacer y la misión de ofrecer atención médica de excelencia para todos.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+
+      // ============================================================
+      //  VARIABLES
+      // ============================================================
+      const esPrimerIngreso = <%= esPrimerIngreso %>;
+
+      // ============================================================
+      //  ELEMENTOS DEL MODAL Y FORMULARIO
+      // ============================================================
+      const modalBloqueo = document.getElementById('modalBloqueoPrimerIngreso');
+      const formCambioPasswordModal = document.getElementById('formCambioPasswordModal');
+      const currentPasswordModal = document.getElementById('currentPasswordModal');
+      const newPasswordModal = document.getElementById('newPasswordModal');
+      const confirmNewPasswordModal = document.getElementById('confirmNewPasswordModal');
+      const passwordChangeErrorModal = document.getElementById('passwordChangeErrorModal');
+      const passwordChangeSuccessModal = document.getElementById('passwordChangeSuccessModal');
+      const btnCambiarPasswordModal = document.getElementById('btnCambiarPasswordModal');
+
+      // ============================================================
+      //  MOSTRAR MODAL SI ES PRIMER INGRESO
+      // ============================================================
+      if (esPrimerIngreso) {
+        console.log('🔒 Primer ingreso - Mostrando modal con formulario');
+        if (modalBloqueo) {
+          modalBloqueo.classList.add('active');
+        }
+        document.body.classList.add('modal-bloqueo-activo');
+        document.body.style.overflow = 'hidden';
+
+        const menuToggle = document.getElementById('menuToggle');
+        if (menuToggle) {
+          menuToggle.classList.add('disabled');
+          menuToggle.setAttribute('disabled', 'disabled');
+        }
+      }
+
+      // ============================================================
+      //  TOGGLE MOSTRAR/OCULTAR CONTRASEÑA EN EL MODAL
+      // ============================================================
+      document.querySelectorAll('.toggle-password-modal').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          const targetId = this.getAttribute('data-target');
+          const input = document.getElementById(targetId);
+          const icon = this.querySelector('i');
+          if (input) {
+            if (input.type === 'password') {
+              input.type = 'text';
+              icon.classList.remove('fa-eye');
+              icon.classList.add('fa-eye-slash');
+              icon.style.color = '#1a5276';
+            } else {
+              input.type = 'password';
+              icon.classList.remove('fa-eye-slash');
+              icon.classList.add('fa-eye');
+              icon.style.color = '#6c757d';
+            }
+          }
+        });
+      });
+
+      // ============================================================
+      //  VALIDACIÓN EN TIEMPO REAL (NUEVA CONTRASEÑA)
+      // ============================================================
+      if (newPasswordModal) {
+        newPasswordModal.addEventListener('input', function() {
+          const pass = this.value;
+          if (pass.length > 0 && (pass.length < 9 || pass.length > 15)) {
+            this.classList.add('is-invalid');
+            this.classList.remove('is-valid');
+          } else if (pass.length >= 9 && pass.length <= 15) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+          } else {
+            this.classList.remove('is-invalid', 'is-valid');
+          }
+        });
+      }
+
+      // ============================================================
+      //  ENVÍO DEL FORMULARIO DESDE EL MODAL (CON VALIDACIÓN COMPLETA)
+      // ============================================================
+      if (formCambioPasswordModal) {
+        formCambioPasswordModal.addEventListener('submit', async function(e) {
+          e.preventDefault();
+
+          // Ocultar mensajes anteriores
+          passwordChangeErrorModal.classList.add('d-none');
+          passwordChangeSuccessModal.classList.add('d-none');
+
+          // Obtener valores
+          const current = currentPasswordModal.value.trim();
+          const newPass = newPasswordModal.value.trim();
+          const confirm = confirmNewPasswordModal.value.trim();
+
+          // Validaciones frontend
+          if (!current) {
+            passwordChangeErrorModal.textContent = '⚠️ La contraseña actual es obligatoria.';
+            passwordChangeErrorModal.classList.remove('d-none');
+            return;
+          }
+
+          if (!newPass || !confirm) {
+            passwordChangeErrorModal.textContent = '⚠️ La nueva contraseña y su confirmación son obligatorias.';
+            passwordChangeErrorModal.classList.remove('d-none');
+            return;
+          }
+
+          if (newPass.length < 9 || newPass.length > 15) {
+            passwordChangeErrorModal.textContent = '⚠️ La nueva contraseña debe tener entre 9 y 15 caracteres.';
+            passwordChangeErrorModal.classList.remove('d-none');
+            return;
+          }
+
+          if (newPass !== confirm) {
+            passwordChangeErrorModal.textContent = '⚠️ Las contraseñas no coinciden.';
+            passwordChangeErrorModal.classList.remove('d-none');
+            return;
+          }
+
+          // Deshabilitar botón
+          btnCambiarPasswordModal.disabled = true;
+          btnCambiarPasswordModal.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
+
+          try {
+            const response = await fetch('/dashboard/cambiar-password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                currentPassword: current,
+                newPassword: newPass
+              })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              passwordChangeSuccessModal.textContent = '✅ ' + result.message;
+              passwordChangeSuccessModal.classList.remove('d-none');
+              
+              // Recargar la página para que el modal desaparezca
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500);
+            } else {
+              // Mostrar el error específico del backend
+              passwordChangeErrorModal.textContent = '❌ ' + result.error;
+              passwordChangeErrorModal.classList.remove('d-none');
+              btnCambiarPasswordModal.disabled = false;
+              btnCambiarPasswordModal.innerHTML = '<i class="fas fa-save"></i> Cambiar Contraseña';
+            }
+          } catch (error) {
+            console.error('Error:', error);
+            passwordChangeErrorModal.textContent = '❌ Error de conexión: ' + error.message;
+            passwordChangeErrorModal.classList.remove('d-none');
+            btnCambiarPasswordModal.disabled = false;
+            btnCambiarPasswordModal.innerHTML = '<i class="fas fa-save"></i> Cambiar Contraseña';
+          }
+        });
+      }
+
+      // ============================================================
+      //  SIDEBAR (se mantiene pero con pointer-events: none cuando hay modal)
+      // ============================================================
+      const sidebarModal = document.getElementById('sidebarModal');
+      const modalOverlay = document.getElementById('modalOverlay');
+      const menuToggle = document.getElementById('menuToggle');
+      const closeSidebar = document.getElementById('closeSidebar');
+
+      if (sidebarModal && modalOverlay && menuToggle && closeSidebar) {
+        function openMenu() {
+          if (menuToggle.classList.contains('disabled')) return;
+          sidebarModal.classList.add('open');
+          modalOverlay.classList.add('active');
+          document.body.style.overflow = 'hidden';
+        }
+
+        function closeMenu() {
+          sidebarModal.classList.remove('open');
+          modalOverlay.classList.remove('active');
+          document.body.style.overflow = 'auto';
+        }
+
+        menuToggle.addEventListener('click', openMenu);
+        closeSidebar.addEventListener('click', closeMenu);
+        modalOverlay.addEventListener('click', closeMenu);
+
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') closeMenu();
+        });
+      }
+
+      // ============================================================
+      //  DROPDOWN DE USUARIO (solo funcional si no es primer ingreso)
+      // ============================================================
+      const userMenuButton = document.getElementById('userMenuButton');
+      const userDropdown = document.getElementById('userDropdown');
+      let isDropdownOpen = false;
+
+      if (userMenuButton && userDropdown) {
+        function abrirDropdownUsuario() {
+          if (esPrimerIngreso) return;
+          if (isDropdownOpen) {
+            cerrarDropdownUsuario();
+            return;
+          }
+          const rect = userMenuButton.getBoundingClientRect();
+          const dropdownWidth = Math.min(320, window.innerWidth - 20);
+          let top = rect.bottom + 8;
+          let right = window.innerWidth - rect.right + 10;
+          if (top + 500 > window.innerHeight) {
+            top = rect.top - 8 - 500;
+          }
+          if (top < 10) top = 10;
+          userDropdown.style.top = top + 'px';
+          userDropdown.style.right = right + 'px';
+          userDropdown.style.left = 'auto';
+          userDropdown.style.width = dropdownWidth + 'px';
+          userDropdown.style.display = 'block';
+          userDropdown.classList.add('show');
+          userMenuButton.setAttribute('aria-expanded', 'true');
+          isDropdownOpen = true;
+        }
+
+        function cerrarDropdownUsuario() {
+          userDropdown.style.display = 'none';
+          userDropdown.classList.remove('show');
+          userMenuButton.setAttribute('aria-expanded', 'false');
+          isDropdownOpen = false;
+        }
+
+        userMenuButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          abrirDropdownUsuario();
+        });
+
+        document.addEventListener('click', function(e) {
+          const container = document.getElementById('userDropdownContainer');
+          if (container && !container.contains(e.target) && isDropdownOpen) {
+            cerrarDropdownUsuario();
+          }
+        });
+
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && isDropdownOpen) {
+            cerrarDropdownUsuario();
+          }
+        });
+      }
+
+      // ============================================================
+      //  NAVEGACIÓN ENTRE OPCIONES DEL DROPDOWN (solo si no es primer ingreso)
+      // ============================================================
+      const configOptions = document.querySelectorAll('.config-option');
+      const dropdownPerfil = document.getElementById('dropdownPerfil');
+      const dropdownPassword = document.getElementById('dropdownPassword');
+
+      function showContent(contentId) {
+        if (esPrimerIngreso) return;
+        if (dropdownPerfil) dropdownPerfil.style.display = 'none';
+        if (dropdownPassword) dropdownPassword.style.display = 'none';
+        const target = document.getElementById(contentId);
+        if (target) target.style.display = 'block';
+
+        configOptions.forEach(opt => {
+          opt.classList.remove('active');
+          opt.style.background = 'transparent';
+          opt.style.borderLeft = 'none';
+          const option = opt.getAttribute('data-option');
+          if ((option === 'perfil' && contentId === 'dropdownPerfil') ||
+              (option === 'password' && contentId === 'dropdownPassword')) {
+            opt.classList.add('active');
+            opt.style.background = '#f0f7ff';
+            opt.style.borderLeft = '3px solid #1a5276';
+          }
+        });
+      }
+
+      configOptions.forEach(option => {
+        option.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (esPrimerIngreso) return;
+          if (this.style.opacity === '0.5' || this.style.cursor === 'default') return;
+          const optionName = this.getAttribute('data-option');
+          if (optionName === 'perfil') showContent('dropdownPerfil');
+          else if (optionName === 'password') showContent('dropdownPassword');
+        });
+      });
+
+      // Activar "Perfil" por defecto (solo si no es primer ingreso)
+      if (!esPrimerIngreso) {
+        setTimeout(function() {
+          showContent('dropdownPerfil');
+        }, 100);
+      }
+
+      // ============================================================
+      //  RESTAURAR BASE DE DATOS
+      // ============================================================
+      const btnRestore = document.getElementById('btnRestore');
+      const fileRestore = document.getElementById('fileRestore');
+
+      if (btnRestore && fileRestore) {
+        btnRestore.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (confirm(' ADVERTENCIA: La restauración reemplazará TODOS los datos actuales.\n\n¿Estás seguro de que deseas continuar?')) {
+            fileRestore.click();
+          }
+        });
+
+        fileRestore.addEventListener('change', async function(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          if (!file.name.endsWith('.sql')) {
+            alert(' Por favor, selecciona un archivo con extensión .sql');
+            fileRestore.value = '';
+            return;
+          }
+          const formData = new FormData();
+          formData.append('backup', file);
+          const originalText = btnRestore.innerHTML;
+          btnRestore.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restaurando...';
+          btnRestore.disabled = true;
+          try {
+            const response = await fetch('/bitacora/parametros/restore', {
+              method: 'POST',
+              body: formData
+            });
+            const data = await response.json();
+            if (data.success || data.ok) {
+              alert('✅ ' + (data.message || data.mensaje || 'Base de datos restaurada exitosamente.'));
+              setTimeout(() => {
+                window.location.reload();
+              }, 2000);
+            } else {
+              alert('❌ ' + (data.message || data.mensaje || 'Error al restaurar la base de datos.'));
+            }
+          } catch (err) {
+            console.error(' Error al restaurar:', err);
+            alert(' Error al restaurar: ' + err.message);
+          } finally {
+            fileRestore.value = '';
+            btnRestore.innerHTML = originalText;
+            btnRestore.disabled = false;
+          }
+        });
+      }
+
+      // ============================================================
+      //  APLICAR PERMISOS
+      // ============================================================
+      async function aplicarPermisosMenu() {
+        try {
+          console.log(' Cargando permisos desde la API...');
+          const response = await fetch('/dashboard/permisos');
+          const data = await response.json();
+          if (data.error) {
+            console.error(' Error al cargar permisos:', data.error);
+            usarPermisosPorDefecto();
+            return;
+          }
+          console.log(' Permisos cargados:', data);
+          const permisosMap = {};
+          data.permisos.forEach(p => {
+            permisosMap[p.id] = {
+              consulta: p.consulta || false,
+            };
+          });
+          aplicarPermisosAlMenu(permisosMap);
+        } catch (error) {
+          console.error(' Error al cargar permisos desde API:', error);
+          usarPermisosPorDefecto();
+        }
+      }
+
+      function aplicarPermisosAlMenu(permisosMap) {
+        const menuItems = document.querySelectorAll('.sidebar-item[data-objeto-id]');
+        menuItems.forEach(item => {
+          const objetoId = parseInt(item.getAttribute('data-objeto-id'));
+          const permiso = permisosMap[objetoId];
+          if (!permiso || !permiso.consulta) {
+            item.classList.add('oculto');
+            item.style.display = 'none';
+          } else {
+            item.classList.remove('oculto');
+            item.style.display = 'flex';
+          }
+        });
+        ocultarCategoriasVacias();
+      }
+
+      function usarPermisosPorDefecto() {
+        console.log(' Usando permisos por defecto (fallback)');
+        const menuItems = document.querySelectorAll('.sidebar-item[data-objeto-id]');
+        menuItems.forEach(item => {
+          item.classList.remove('oculto');
+          item.style.display = 'flex';
+        });
+        const categorias = document.querySelectorAll('.sidebar-category');
+        categorias.forEach(cat => {
+          cat.classList.remove('oculto');
+          cat.style.display = 'block';
+        });
+      }
+
+      function ocultarCategoriasVacias() {
+        const categorias = document.querySelectorAll('.sidebar-category');
+        categorias.forEach(categoria => {
+          let siguiente = categoria.nextElementSibling;
+          let hayItemsVisibles = false;
+          while (siguiente && !siguiente.classList.contains('sidebar-category')) {
+            if (siguiente.classList.contains('sidebar-item') && 
+                !siguiente.classList.contains('oculto') &&
+                !siguiente.classList.contains('logout-item') &&
+                !siguiente.classList.contains('sidebar-divider') &&
+                siguiente.style.display !== 'none') {
+              hayItemsVisibles = true;
+              break;
+            }
+            siguiente = siguiente.nextElementSibling;
+          }
+          if (!hayItemsVisibles) {
+            categoria.classList.add('oculto');
+            categoria.style.display = 'none';
+          } else {
+            categoria.classList.remove('oculto');
+            categoria.style.display = 'block';
+          }
+        });
+      }
+
+      setTimeout(function() {
+        aplicarPermisosMenu();
+      }, 500);
+
+      console.log(' Dashboard con permisos inicializado correctamente');
+    });
+  </script>
+
+  <script src="/js/sidebar.js"></script>
+
+</body>
+</html>
