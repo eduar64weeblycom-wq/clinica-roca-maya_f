@@ -333,7 +333,7 @@
                 </div>
             `;
             const btnCrear = document.getElementById('btnCrearPrimeraConsulta');
-            if (btnCrear) btnCrear.addEventListener('click', () => abrirModalConsulta());
+            if (btnCrear) btnCrear.addEventListener('click', () => window.abrirModalConsulta());
             return;
         }
 
@@ -427,9 +427,9 @@
     }
 
     // ============================================================
-    // MODAL CONSULTA - ABRIR / CERRAR / LIMPIAR
+    // MODAL CONSULTA - ABRIR / CERRAR / LIMPIAR (EXPUESTAS GLOBALMENTE)
     // ============================================================
-    function abrirModalConsulta() {
+    window.abrirModalConsulta = function(idCita = null) {
         const modal = $("modalConsulta");
         if (!modal) return;
         modal.style.display = "flex";
@@ -437,9 +437,21 @@
         limpiarModalConsulta();
         aplicarEstadoPreclinica();
         setTimeout(resetearEstilosBotonesModal, 50);
-    }
 
-    function cerrarModalConsulta() {
+        if (idCita) {
+            const selectCita = $("selectCitaConsulta");
+            if (selectCita) {
+                selectCita.value = idCita;
+                selectCita.dataset.citaFiltrada = "true";
+                const citaObj = citas.find(c => String(c.ID_CITA) === String(idCita));
+                if (citaObj) {
+                    cargarTodosLosDatosDeCita(idCita, citaObj.ID_PACIENTE, consultasMap[idCita]?.ID_CONSULTA);
+                }
+            }
+        }
+    };
+
+    window.cerrarModalConsulta = function() {
         const modal = $("modalConsulta");
         if (!modal) return;
         modal.style.display = "none";
@@ -457,7 +469,7 @@
         }
         historialCache.clear();
         preclinicaCache.clear();
-    }
+    };
 
     function limpiarModalConsulta() {
         const ids = ["idConsulta", "motivoConsulta", "sintomasConsulta", "examenFisicoConsulta",
@@ -655,6 +667,33 @@
             cargandoDatos = false;
         }
     }
+
+    // ============================================================
+    // DELEGACIÓN GLOBAL DE EVENTOS (CLICS EN ACCIONES DE TABLA)
+    // ============================================================
+    document.addEventListener('click', (e) => {
+        const btnAccion = e.target.closest('[data-action]');
+        if (!btnAccion) return;
+
+        const action = btnAccion.dataset.action;
+        const idCita = btnAccion.dataset.id;
+
+        if (action === 'abrirConsulta' || action === 'editarConsulta') {
+            window.abrirModalConsulta(idCita);
+        } else if (action === 'cancelar') {
+            if (confirm("¿Está seguro de que desea cancelar esta cita?")) {
+                API.cambiarEstado(idCita, 'CANCELADA')
+                    .then(() => cargarDatosIniciales())
+                    .catch(err => alert("Error al cancelar: " + err.message));
+            }
+        } else if (action === 'no_asistio') {
+            if (confirm("¿Marcar esta cita como 'No Asistió'?")) {
+                API.cambiarEstado(idCita, 'NO_ASISTIO')
+                    .then(() => cargarDatosIniciales())
+                    .catch(err => alert("Error al actualizar estado: " + err.message));
+            }
+        }
+    });
 
     document.addEventListener("DOMContentLoaded", () => {
         cargarDatosIniciales();
