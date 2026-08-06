@@ -83,9 +83,11 @@ async function obtenerColumnaEspecialidadCita() {
   }
 
   try {
-    const [columnas] = await pool.query(
-      "SHOW COLUMNS FROM TBL_CITAS"
-    );
+    const { rows: columnas } = await pool.query(`
+      SELECT column_name AS "Field"
+      FROM information_schema.columns
+      WHERE table_name = 'tbl_citas'
+    `);
 
     const nombres = new Set(
       columnas.map((columna) =>
@@ -239,17 +241,17 @@ async function validarEspecialidadDelDoctor(
   idDoctor,
   idEspecialidad
 ) {
-  const [rows] = await executor.query(
+  const { rows } = await executor.query(
     `
       SELECT
-        e.ID_ESPECIALIDAD,
-        e.NOMBRE_ESPECIALIDAD
-      FROM TBL_DOCTOR_ESPECIALIDAD de
-      INNER JOIN TBL_ESPECIALIDADES e
-        ON e.ID_ESPECIALIDAD = de.ID_ESPECIALIDAD
-      WHERE de.ID_DOCTOR = ?
-        AND de.ID_ESPECIALIDAD = ?
-        AND e.ESTADO = 'ACTIVA'
+        e.id_especialidad AS "ID_ESPECIALIDAD",
+        e.nombre_especialidad AS "NOMBRE_ESPECIALIDAD"
+      FROM tbl_doctor_especialidad de
+      INNER JOIN tbl_especialidades e
+        ON e.id_especialidad = de.id_especialidad
+      WHERE de.id_doctor = $1
+        AND de.id_especialidad = $2
+        AND e.estado = 'ACTIVA'
       LIMIT 1
     `,
     [idDoctor, idEspecialidad]
@@ -274,24 +276,23 @@ async function obtenerEspecialidadesActivasPorDoctores(
   }
 
   const placeholders = idsValidos
-    .map(() => "?")
+    .map((_, i) => `$${i + 1}`)
     .join(",");
 
-  const [rows] = await pool.query(
+  const { rows } = await pool.query(
     `
       SELECT
-        de.ID_DOCTOR,
-        e.ID_ESPECIALIDAD,
-        e.NOMBRE_ESPECIALIDAD
-      FROM TBL_DOCTOR_ESPECIALIDAD de
-      INNER JOIN TBL_ESPECIALIDADES e
-        ON e.ID_ESPECIALIDAD =
-           de.ID_ESPECIALIDAD
-      WHERE de.ID_DOCTOR IN (${placeholders})
-        AND e.ESTADO = 'ACTIVA'
+        de.id_doctor AS "ID_DOCTOR",
+        e.id_especialidad AS "ID_ESPECIALIDAD",
+        e.nombre_especialidad AS "NOMBRE_ESPECIALIDAD"
+      FROM tbl_doctor_especialidad de
+      INNER JOIN tbl_especialidades e
+        ON e.id_especialidad = de.id_especialidad
+      WHERE de.id_doctor IN (${placeholders})
+        AND e.estado = 'ACTIVA'
       ORDER BY
-        de.ID_DOCTOR,
-        e.NOMBRE_ESPECIALIDAD
+        de.id_doctor,
+        e.nombre_especialidad
     `,
     idsValidos
   );
@@ -330,17 +331,17 @@ async function obtenerEspecialidadesPorIds(ids) {
   }
 
   const placeholders = idsValidos
-    .map(() => "?")
+    .map((_, i) => `$${i + 1}`)
     .join(",");
 
-  const [rows] = await pool.query(
+  const { rows } = await pool.query(
     `
       SELECT
-        ID_ESPECIALIDAD,
-        NOMBRE_ESPECIALIDAD,
-        ESTADO
-      FROM TBL_ESPECIALIDADES
-      WHERE ID_ESPECIALIDAD IN (${placeholders})
+        id_especialidad AS "ID_ESPECIALIDAD",
+        nombre_especialidad AS "NOMBRE_ESPECIALIDAD",
+        estado AS "ESTADO"
+      FROM tbl_especialidades
+      WHERE id_especialidad IN (${placeholders})
     `,
     idsValidos
   );
@@ -488,26 +489,6 @@ function deduplicarCitasExactas(citas) {
   };
 }
 
-function convertirJsonSeguro(valor) {
-  if (!valor) {
-    return {};
-  }
-
-  try {
-    if (Buffer.isBuffer(valor)) {
-      return JSON.parse(valor.toString("utf8"));
-    }
-
-    if (typeof valor === "string") {
-      return JSON.parse(valor);
-    }
-
-    return typeof valor === "object" ? valor : {};
-  } catch {
-    return {};
-  }
-}
-
 /* ============================================================
    GET /citas
 ============================================================ */
@@ -545,7 +526,6 @@ router.get("/api/datos", async (req, res) => {
       ? `c."${columnaEspecialidad}" AS ID_ESPECIALIDAD_CITA_DB,`
       : "NULL AS ID_ESPECIALIDAD_CITA_DB,";
 
-    // Consulta adaptada a PostgreSQL
     const { rows: citasRows } = await pool.query(`
       SELECT
         c.id_cita AS ID_CITA,
@@ -599,7 +579,6 @@ router.get("/api/datos", async (req, res) => {
         c.fecha_cita DESC
     `);
 
-    // ... resto de tu lógica ...
     const mapaFallback = columnaEspecialidad
       ? {}
       : await leerMapaEspecialidades();
@@ -640,12 +619,6 @@ router.get("/api/datos", async (req, res) => {
           )
         : null;
 
-      /*
-       * Recuperación segura:
-       * si la cita no tiene relación guardada y el médico solo
-       * posee una especialidad activa, esa es inequívocamente
-       * la especialidad de la cita.
-       */
       if (
         !especialidad &&
         especialidadesDoctor.length === 1
@@ -736,38 +709,37 @@ router.get("/api/datos", async (req, res) => {
       );
     }
 
-    const [doctoresRows] = await pool.query(`
+    const { rows: doctoresRows } = await pool.query(`
       SELECT
-        u.ID_USUARIO AS ID_DOCTOR,
-        u.NOMBRE_USUARIO AS NOMBRE,
-        u.CORREO_ELECTRONICO,
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            e.ID_ESPECIALIDAD,
+        u.id_usuario AS "ID_DOCTOR",
+        u.nombre_usuario AS "NOMBRE",
+        u.correo_electronico AS "CORREO_ELECTRONICO",
+        STRING_AGG(
+          CONCAT(
+            e.id_especialidad,
             '::',
-            e.NOMBRE_ESPECIALIDAD
-          )
-          ORDER BY e.NOMBRE_ESPECIALIDAD
-          SEPARATOR '||'
-        ) AS ESPECIALIDADES_RAW
-      FROM TBL_MS_USUARIO u
-      INNER JOIN TBL_DOCTOR_ESPECIALIDAD de
-        ON u.ID_USUARIO = de.ID_DOCTOR
-      INNER JOIN TBL_ESPECIALIDADES e
-        ON e.ID_ESPECIALIDAD = de.ID_ESPECIALIDAD
-       AND e.ESTADO = 'ACTIVA'
-      WHERE u.ESTADO = 'ACTIVO'
-        AND u.ID_ROL = (
-          SELECT ID_ROL
-          FROM TBL_MS_ROLES
-          WHERE ROL = 'DOCTOR'
+            e.nombre_especialidad
+          ),
+          '||' ORDER BY e.nombre_especialidad
+        ) AS "ESPECIALIDADES_RAW"
+      FROM tbl_ms_usuario u
+      INNER JOIN tbl_doctor_especialidad de
+        ON u.id_usuario = de.id_doctor
+      INNER JOIN tbl_especialidades e
+        ON e.id_especialidad = de.id_especialidad
+       AND e.estado = 'ACTIVA'
+      WHERE u.estado = 'ACTIVO'
+        AND u.id_rol = (
+          SELECT id_rol
+          FROM tbl_ms_roles
+          WHERE rol = 'DOCTOR'
           LIMIT 1
         )
       GROUP BY
-        u.ID_USUARIO,
-        u.NOMBRE_USUARIO,
-        u.CORREO_ELECTRONICO
-      ORDER BY u.NOMBRE_USUARIO ASC
+        u.id_usuario,
+        u.nombre_usuario,
+        u.correo_electronico
+      ORDER BY u.nombre_usuario ASC
     `);
 
     const doctores = doctoresRows.map((doctor) => {
@@ -814,17 +786,17 @@ router.get("/api/datos", async (req, res) => {
       };
     });
 
-    const [pacientes] = await pool.query(`
+    const { rows: pacientes } = await pool.query(`
       SELECT
-        ID_PACIENTE,
-        NOMBRES,
-        APELLIDOS,
-        TELEFONO,
-        CORREO_ELECTRONICO,
-        NUMERO_DOCUMENTO_IDENTIDAD
-      FROM TBL_PACIENTE
-      WHERE ESTADO = 'ACTIVO'
-      ORDER BY NOMBRES, APELLIDOS
+        id_paciente AS "ID_PACIENTE",
+        nombres AS "NOMBRES",
+        apellidos AS "APELLIDOS",
+        telefono AS "TELEFONO",
+        correo_electronico AS "CORREO_ELECTRONICO",
+        numero_documento_identidad AS "NUMERO_DOCUMENTO_IDENTIDAD"
+      FROM tbl_paciente
+      WHERE estado = 'ACTIVO'
+      ORDER BY nombres, apellidos
     `);
 
     res.json({
@@ -908,19 +880,19 @@ router.get(
         });
       }
 
-      const [especialidades] = await pool.query(
+      const { rows: especialidades } = await pool.query(
         `
           SELECT
-            e.ID_ESPECIALIDAD,
-            e.NOMBRE_ESPECIALIDAD,
-            e.DESCRIPCION,
-            e.ESTADO
-          FROM TBL_DOCTOR_ESPECIALIDAD de
-          INNER JOIN TBL_ESPECIALIDADES e
-            ON e.ID_ESPECIALIDAD = de.ID_ESPECIALIDAD
-          WHERE de.ID_DOCTOR = ?
-            AND e.ESTADO = 'ACTIVA'
-          ORDER BY e.NOMBRE_ESPECIALIDAD ASC
+            e.id_especialidad AS "ID_ESPECIALIDAD",
+            e.nombre_especialidad AS "NOMBRE_ESPECIALIDAD",
+            e.descripcion AS "DESCRIPCION",
+            e.estado AS "ESTADO"
+          FROM tbl_doctor_especialidad de
+          INNER JOIN tbl_especialidades e
+            ON e.id_especialidad = de.id_especialidad
+          WHERE de.id_doctor = $1
+            AND e.estado = 'ACTIVA'
+          ORDER BY e.nombre_especialidad ASC
         `,
         [idDoctor]
       );
@@ -974,16 +946,16 @@ router.post(
         });
       }
 
-      connection = await pool.getConnection();
-      await connection.beginTransaction();
+      connection = await pool.connect();
+      await connection.query("BEGIN");
 
-      const [citas] = await connection.query(
+      const { rows: citas } = await connection.query(
         `
           SELECT
-            ID_CITA,
-            ID_DOCTOR
-          FROM TBL_CITAS
-          WHERE ID_CITA = ?
+            id_cita AS "ID_CITA",
+            id_doctor AS "ID_DOCTOR"
+          FROM tbl_citas
+          WHERE id_cita = $1
           LIMIT 1
           FOR UPDATE
         `,
@@ -991,7 +963,7 @@ router.post(
       );
 
       if (citas.length === 0) {
-        await connection.rollback();
+        await connection.query("ROLLBACK");
 
         return res.status(404).json({
           success: false,
@@ -1010,7 +982,7 @@ router.post(
         );
 
       if (!especialidadValida) {
-        await connection.rollback();
+        await connection.query("ROLLBACK");
 
         return res.status(400).json({
           success: false,
@@ -1025,13 +997,12 @@ router.post(
       if (columnaEspecialidad) {
         await connection.query(
           `
-            UPDATE TBL_CITAS
+            UPDATE tbl_citas
             SET
-              \`${columnaEspecialidad}\` = ?,
-              FECHA_MODIFICACION =
-                CURRENT_TIMESTAMP,
-              USUARIO_MODIFICACION = ?
-            WHERE ID_CITA = ?
+              "${columnaEspecialidad}" = $1,
+              fecha_modificacion = CURRENT_TIMESTAMP,
+              usuario_modificacion = $2
+            WHERE id_cita = $3
           `,
           [
             idEspecialidad,
@@ -1041,7 +1012,7 @@ router.post(
         );
       }
 
-      await connection.commit();
+      await connection.query("COMMIT");
 
       if (!columnaEspecialidad) {
         await guardarEspecialidadFallback(
@@ -1075,7 +1046,7 @@ router.post(
     } catch (error) {
       if (connection) {
         await connection
-          .rollback()
+          .query("ROLLBACK")
           .catch(() => {});
       }
 
@@ -1203,8 +1174,8 @@ router.post("/nueva", async (req, res) => {
       claveCreacion
     );
 
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
+    connection = await pool.connect();
+    await connection.query("BEGIN");
 
     const especialidadValida =
       await validarEspecialidadDelDoctor(
@@ -1214,7 +1185,7 @@ router.post("/nueva", async (req, res) => {
       );
 
     if (!especialidadValida) {
-      await connection.rollback();
+      await connection.query("ROLLBACK");
 
       return res.status(400).json({
         success: false,
@@ -1223,17 +1194,17 @@ router.post("/nueva", async (req, res) => {
       });
     }
 
-    const [duplicadas] = await connection.query(
+    const { rows: duplicadas } = await connection.query(
       `
-        SELECT ID_CITA
-        FROM TBL_CITAS
-        WHERE ESTADO <> 'CANCELADA'
+        SELECT id_cita AS "ID_CITA"
+        FROM tbl_citas
+        WHERE estado <> 'CANCELADA'
           AND (
-            ID_DOCTOR = ?
-            OR ID_PACIENTE = ?
+            id_doctor = $1
+            OR id_paciente = $2
           )
-          AND (? < FECHA_FIN_ESTIMADA)
-          AND (? > FECHA_CITA)
+          AND ($3 < fecha_fin_estimada)
+          AND ($4 > fecha_cita)
         LIMIT 1
       `,
       [
@@ -1245,7 +1216,7 @@ router.post("/nueva", async (req, res) => {
     );
 
     if (duplicadas.length > 0) {
-      await connection.rollback();
+      await connection.query("ROLLBACK");
 
       return res.status(409).json({
         success: false,
@@ -1293,21 +1264,22 @@ router.post("/nueva", async (req, res) => {
       valores.splice(2, 0, idEspecialidad);
     }
 
-    const placeholders = columnas
-      .map(() => "?")
+    const placeholders = valores
+      .map((_, i) => `$${i + 1}`)
       .join(", ");
 
-    const [result] = await connection.query(
+    const { rows: result } = await connection.query(
       `
-        INSERT INTO TBL_CITAS (
-          ${columnas.map((columna) => `\`${columna}\``).join(", ")}
+        INSERT INTO tbl_citas (
+          ${columnas.map((columna) => `"${columna.toLowerCase()}"`).join(", ")}
         )
         VALUES (${placeholders})
+        RETURNING id_cita AS "insertId"
       `,
       valores
     );
 
-    idCitaCreada = result.insertId;
+    idCitaCreada = result[0].insertId;
 
     if (!columnaEspecialidad) {
       await guardarEspecialidadFallback(
@@ -1317,7 +1289,7 @@ router.post("/nueva", async (req, res) => {
       fallbackCreado = true;
     }
 
-    await connection.commit();
+    await connection.query("COMMIT");
 
     await registrarEventoBitacora({
       usuario: getUsuario(req),
@@ -1378,770 +1350,30 @@ router.post("/nueva", async (req, res) => {
     });
   } catch (error) {
     if (connection) {
-      await connection.rollback().catch(() => {});
+      await connection.query("ROLLBACK").catch(() => {});
     }
 
     if (fallbackCreado && idCitaCreada) {
       await eliminarEspecialidadFallback(
         idCitaCreada
-      ).catch(() => {});
+      );
     }
 
     console.error("POST /citas/nueva error:", error);
 
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "ERROR_CREACION_CITA",
-      descripcion: error.message,
-      modulo: "CITAS",
-      tabla: "TBL_CITAS",
-      estado: "ERROR",
-      detalleError: error.message,
-      req,
-    });
-
     return res.status(500).json({
       success: false,
-      message:
-        "Error creando la cita: " + error.message,
+      message: "No se pudo registrar la cita médica.",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
     });
   } finally {
     if (claveCreacion) {
-      clavesCreacionCitaEnProceso.delete(
-        claveCreacion
-      );
+      clavesCreacionCitaEnProceso.delete(claveCreacion);
     }
-
     connection?.release();
-  }
-});
-
-/* ============================================================
-   POST /citas/editar
-============================================================ */
-
-router.post("/editar", async (req, res) => {
-  let connection;
-  let valorFallbackAnterior;
-  let fallbackModificado = false;
-
-  try {
-    const {
-      idCita,
-      paciente,
-      doctor,
-      especialidad,
-      fechaCita,
-      tipoCita,
-      prioridad,
-      motivo,
-      duracion,
-      canal,
-      estado,
-    } = req.body;
-
-    const id = convertirId(idCita);
-    const idPaciente = convertirId(paciente);
-    const idDoctor = convertirId(doctor);
-    const idEspecialidad = convertirId(especialidad);
-
-    if (
-      !id ||
-      !idPaciente ||
-      !idDoctor ||
-      !idEspecialidad ||
-      !fechaCita
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Cita, paciente, médico, especialidad, fecha y hora son obligatorios.",
-      });
-    }
-
-    const fecha = new Date(fechaCita);
-
-    if (Number.isNaN(fecha.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "Fecha inválida.",
-      });
-    }
-
-    const estadoNormalizado = String(
-      estado || "PROGRAMADA"
-    )
-      .trim()
-      .toUpperCase();
-
-    const estadosPermitidos = [
-      "PROGRAMADA",
-      "CONFIRMADA",
-      "PRECLINICA",
-      "CONSULTA_MEDICA",
-      "FINALIZADA",
-      "CANCELADA",
-      "NO_ASISTIO",
-    ];
-
-    if (!estadosPermitidos.includes(estadoNormalizado)) {
-      return res.status(400).json({
-        success: false,
-        message: "El estado seleccionado no es válido.",
-      });
-    }
-
-    if (
-      fecha.getTime() <= Date.now() &&
-      estadoNormalizado !== "FINALIZADA"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Las citas con una fecha anterior deben conservarse con estado FINALIZADA.",
-      });
-    }
-
-    const durMin = Number(duracion) || 30;
-    const fechaFin = new Date(
-      fecha.getTime() + durMin * 60000
-    );
-
-    const mysqlFecha = formatearFechaMySQL(fecha);
-    const mysqlFin = formatearFechaMySQL(fechaFin);
-
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    const especialidadValida =
-      await validarEspecialidadDelDoctor(
-        connection,
-        idDoctor,
-        idEspecialidad
-      );
-
-    if (!especialidadValida) {
-      await connection.rollback();
-
-      return res.status(400).json({
-        success: false,
-        message:
-          "La especialidad seleccionada no está asignada al médico.",
-      });
-    }
-
-    const [duplicadas] = await connection.query(
-      `
-        SELECT ID_CITA
-        FROM TBL_CITAS
-        WHERE ESTADO <> 'CANCELADA'
-          AND ID_CITA <> ?
-          AND (
-            ID_DOCTOR = ?
-            OR ID_PACIENTE = ?
-          )
-          AND (? < FECHA_FIN_ESTIMADA)
-          AND (? > FECHA_CITA)
-        LIMIT 1
-      `,
-      [
-        id,
-        idDoctor,
-        idPaciente,
-        mysqlFecha,
-        mysqlFin,
-      ]
-    );
-
-    if (duplicadas.length > 0) {
-      await connection.rollback();
-
-      return res.status(409).json({
-        success: false,
-        code: "DUPLICATE_CITA",
-        message:
-          "Ya existe una cita para ese paciente o médico en el horario seleccionado.",
-      });
-    }
-
-    const columnaEspecialidad =
-      await obtenerColumnaEspecialidadCita();
-
-    const asignaciones = [
-      "ID_PACIENTE = ?",
-      "ID_DOCTOR = ?",
-      "FECHA_CITA = ?",
-      "FECHA_FIN_ESTIMADA = ?",
-      "DURACION_ESTIMADA_MIN = ?",
-      "MOTIVO_CONSULTA = ?",
-      "TIPO_CITA = ?",
-      "PRIORIDAD = ?",
-      "CANAL_REGISTRO = ?",
-      "ESTADO = ?",
-      "FECHA_MODIFICACION = CURRENT_TIMESTAMP",
-      "USUARIO_MODIFICACION = ?",
-    ];
-
-    const valores = [
-      idPaciente,
-      idDoctor,
-      mysqlFecha,
-      mysqlFin,
-      durMin,
-      motivo || null,
-      tipoCita || "PRIMERA_VEZ",
-      prioridad || "NORMAL",
-      canal || "PRESENCIAL",
-      estadoNormalizado,
-      getUsuario(req),
-    ];
-
-    if (columnaEspecialidad) {
-      asignaciones.splice(
-        2,
-        0,
-        `\`${columnaEspecialidad}\` = ?`
-      );
-      valores.splice(2, 0, idEspecialidad);
-    }
-
-    valores.push(id);
-
-    const [result] = await connection.query(
-      `
-        UPDATE TBL_CITAS
-        SET ${asignaciones.join(",\n            ")}
-        WHERE ID_CITA = ?
-      `,
-      valores
-    );
-
-    if (result.affectedRows === 0) {
-      await connection.rollback();
-
-      return res.status(404).json({
-        success: false,
-        message: "Cita no encontrada.",
-      });
-    }
-
-    if (!columnaEspecialidad) {
-      const mapa = await leerMapaEspecialidades();
-      valorFallbackAnterior =
-        mapa[String(id)] ?? null;
-
-      await guardarEspecialidadFallback(
-        id,
-        idEspecialidad
-      );
-
-      fallbackModificado = true;
-    }
-
-    await connection.commit();
-
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "EDICION_CITA",
-      descripcion:
-        `Editada cita ID ${id}; especialidad ${especialidadValida.NOMBRE_ESPECIALIDAD}`,
-      modulo: "CITAS",
-      idRegistro: id,
-      tabla: "TBL_CITAS",
-      estado: "EXITO",
-      req,
-    });
-
-    return res.json({
-      success: true,
-      message: "Cita actualizada correctamente.",
-      idCita: id,
-      idEspecialidad,
-      especialidad:
-        especialidadValida.NOMBRE_ESPECIALIDAD,
-    });
-  } catch (error) {
-    if (connection) {
-      await connection.rollback().catch(() => {});
-    }
-
-    if (fallbackModificado) {
-      await restaurarEspecialidadFallback(
-        req.body.idCita,
-        valorFallbackAnterior
-      ).catch(() => {});
-    }
-
-    console.error("POST /citas/editar error:", error);
-
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "ERROR_EDICION_CITA",
-      descripcion: error.message,
-      modulo: "CITAS",
-      tabla: "TBL_CITAS",
-      estado: "ERROR",
-      detalleError: error.message,
-      req,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Error actualizando la cita: " +
-        error.message,
-    });
-  } finally {
-    connection?.release();
-  }
-});
-
-/* ============================================================
-   POST /citas/cambiar-estado
-============================================================ */
-
-async function handleCambiarEstado(req, res) {
-  try {
-    const idCita = convertirId(req.body.idCita);
-    const nuevoEstado = String(
-      req.body.nuevoEstado || ""
-    )
-      .trim()
-      .toUpperCase();
-
-    const estadosValidos = [
-      "PROGRAMADA",
-      "CONFIRMADA",
-      "PRECLINICA",
-      "CONSULTA_MEDICA",
-      "FINALIZADA",
-      "CANCELADA",
-      "NO_ASISTIO",
-    ];
-
-    if (
-      !idCita ||
-      !estadosValidos.includes(nuevoEstado)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Los parámetros del cambio de estado no son válidos.",
-      });
-    }
-
-    const [result] = await pool.query(
-      `
-        UPDATE TBL_CITAS
-        SET
-          ESTADO = ?,
-          FECHA_MODIFICACION = CURRENT_TIMESTAMP,
-          USUARIO_MODIFICACION = ?
-        WHERE ID_CITA = ?
-      `,
-      [nuevoEstado, getUsuario(req), idCita]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Cita no encontrada.",
-      });
-    }
-
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "CAMBIO_ESTADO_CITA",
-      descripcion:
-        `Cita ${idCita} -> ${nuevoEstado}`,
-      modulo: "CITAS",
-      idRegistro: idCita,
-      tabla: "TBL_CITAS",
-      estado: "EXITO",
-      req,
-    });
-
-    return res.json({
-      success: true,
-      message: "Estado actualizado.",
-    });
-  } catch (error) {
-    console.error(
-      "POST /citas/cambiar-estado error:",
-      error
-    );
-
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "ERROR_CAMBIO_ESTADO_CITA",
-      descripcion: error.message,
-      modulo: "CITAS",
-      tabla: "TBL_CITAS",
-      estado: "ERROR",
-      detalleError: error.message,
-      req,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Error cambiando estado: " + error.message,
-    });
-  }
-}
-
-router.post("/cambiar-estado", handleCambiarEstado);
-router.post("/estado", handleCambiarEstado);
-
-/* ============================================================
-   POST /citas/consulta-express/:idCita
-============================================================ */
-
-router.post(
-  "/consulta-express/:idCita",
-  async (req, res) => {
-    try {
-      const idCita = convertirId(
-        req.params.idCita
-      );
-
-      const confirmar =
-        req.body?.confirmar === true;
-
-      if (!idCita) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "El ID de la cita no es válido.",
-        });
-      }
-
-      const { rows: citas } = await pool.query(
-        `
-          SELECT
-            c.ID_CITA,
-            c.ID_PACIENTE,
-            c.ID_DOCTOR,
-            c.ESTADO,
-            CONCAT(
-              p.NOMBRES,
-              ' ',
-              p.APELLIDOS
-            ) AS NOMBRE_PACIENTE
-          FROM TBL_CITAS c
-          INNER JOIN TBL_PACIENTE p
-            ON p.ID_PACIENTE = c.ID_PACIENTE
-          WHERE c.ID_CITA = ?
-          LIMIT 1
-        `,
-        [idCita]
-      );
-
-      if (citas.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "La cita seleccionada no existe.",
-        });
-      }
-
-      const cita = citas[0];
-      const estadoActual = String(
-        cita.ESTADO || ""
-      ).toUpperCase();
-
-      const estadosPermitidos = [
-        "PROGRAMADA",
-        "CONFIRMADA",
-        "PRECLINICA",
-        "CONSULTA_MEDICA",
-      ];
-
-      if (!estadosPermitidos.includes(estadoActual)) {
-        return res.status(409).json({
-          success: false,
-          message:
-            `La cita está en estado ${estadoActual || "SIN ESTADO"} y no puede abrirse mediante Consulta Médica Express.`,
-        });
-      }
-
-      const [preclinicas] = await pool.query(
-        `
-          SELECT
-            ID_PRECLINICA,
-            TEMPERATURA,
-            PRESION_SISTOLICA,
-            PRESION_DIASTOLICA,
-            FRECUENCIA_CARDIACA,
-            FRECUENCIA_RESPIRATORIA,
-            SATURACION_OXIGENO,
-            PESO,
-            TALLA,
-            SIGNOS_VITALES_JSON
-          FROM TBL_PRECLINICA
-          WHERE ID_CITA = ?
-          LIMIT 1
-        `,
-        [idCita]
-      );
-
-      const preclinica =
-        preclinicas[0] || null;
-
-      const camposPendientes = [];
-      let alertasClinicas = [];
-
-      if (!preclinica) {
-        camposPendientes.push(
-          "Registro de preclínica"
-        );
-      } else {
-        const camposPrincipales = [
-          ["TEMPERATURA", "Temperatura"],
-          [
-            "PRESION_SISTOLICA",
-            "Presión sistólica",
-          ],
-          [
-            "PRESION_DIASTOLICA",
-            "Presión diastólica",
-          ],
-          [
-            "FRECUENCIA_CARDIACA",
-            "Frecuencia cardíaca",
-          ],
-          [
-            "FRECUENCIA_RESPIRATORIA",
-            "Frecuencia respiratoria",
-          ],
-          [
-            "SATURACION_OXIGENO",
-            "Saturación de oxígeno",
-          ],
-          ["PESO", "Peso"],
-          ["TALLA", "Talla"],
-        ];
-
-        camposPrincipales.forEach(
-          ([campo, etiqueta]) => {
-            const valor = preclinica[campo];
-
-            if (
-              valor === null ||
-              valor === undefined ||
-              String(valor).trim() === "" ||
-              Number(valor) <= 0
-            ) {
-              camposPendientes.push(etiqueta);
-            }
-          }
-        );
-
-        const signosJson = convertirJsonSeguro(
-          preclinica.SIGNOS_VITALES_JSON
-        );
-
-        const controlConsulta =
-          signosJson.controlConsulta || {};
-
-        if (
-          Array.isArray(
-            controlConsulta.alertasClinicas
-          )
-        ) {
-          alertasClinicas =
-            controlConsulta.alertasClinicas
-              .map((alerta) =>
-                typeof alerta === "string"
-                  ? alerta
-                  : alerta?.mensaje ||
-                    alerta?.message ||
-                    alerta?.texto ||
-                    ""
-              )
-              .filter(Boolean);
-        }
-      }
-
-      const alertaPreclinica =
-        camposPendientes.length > 0 ||
-        alertasClinicas.length > 0;
-
-      const redirectUrl =
-        `/consultaMedica?idCita=${encodeURIComponent(
-          idCita
-        )}&express=1`;
-
-      if (!confirmar) {
-        return res.json({
-          success: true,
-          requiereConfirmacion: true,
-          idCita,
-          nombrePaciente:
-            cita.NOMBRE_PACIENTE,
-          tienePreclinica: Boolean(preclinica),
-          alertaPreclinica,
-          camposPendientes,
-          alertasClinicas,
-          redirectUrl,
-          message: !preclinica
-            ? "La cita no tiene una preclínica registrada."
-            : alertaPreclinica
-              ? "La preclínica contiene información pendiente o alertas clínicas."
-              : "La cita está lista para Consulta Médica.",
-        });
-      }
-
-      if (estadoActual !== "CONSULTA_MEDICA") {
-        await pool.query(
-          `
-            UPDATE TBL_CITAS
-            SET
-              ESTADO = 'CONSULTA_MEDICA',
-              FECHA_MODIFICACION = CURRENT_TIMESTAMP,
-              USUARIO_MODIFICACION = ?
-            WHERE ID_CITA = ?
-          `,
-          [getUsuario(req), idCita]
-        );
-      }
-
-      await registrarEventoBitacora({
-        usuario: getUsuario(req),
-        accion: "CONSULTA_MEDICA_EXPRESS",
-        descripcion:
-          `Cita ${idCita} abierta mediante Consulta Médica Express` +
-          (alertaPreclinica
-            ? ` con ${camposPendientes.length} dato(s) pendiente(s)`
-            : " sin datos pendientes"),
-        modulo: "CITAS",
-        idRegistro: idCita,
-        tabla: "TBL_CITAS",
-        estado: "EXITO",
-        req,
-      });
-
-      return res.json({
-        success: true,
-        confirmado: true,
-        idCita,
-        alertaPreclinica,
-        camposPendientes,
-        alertasClinicas,
-        redirectUrl,
-        message:
-          "Abriendo Consulta Médica Express.",
-      });
-    } catch (error) {
-      console.error(
-        "POST /citas/consulta-express/:idCita error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        message:
-          "No se pudo abrir Consulta Médica Express.",
-      });
-    }
-  }
-);
-
-/* ============================================================
-   DELETE /citas/eliminar/:id
-============================================================ */
-
-router.delete("/eliminar/:id", async (req, res) => {
-  try {
-    const idCita = convertirId(req.params.id);
-
-    if (!idCita) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de cita requerido.",
-      });
-    }
-
-    const { rows: citas } = await pool.query(
-      `
-        SELECT ID_CITA, ESTADO
-        FROM TBL_CITAS
-        WHERE ID_CITA = ?
-        LIMIT 1
-      `,
-      [idCita]
-    );
-
-    if (citas.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Cita no encontrada.",
-      });
-    }
-
-    const [result] = await pool.query(
-      `
-        DELETE FROM TBL_CITAS
-        WHERE ID_CITA = ?
-      `,
-      [idCita]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Cita no encontrada.",
-      });
-    }
-
-    const columnaEspecialidad =
-      await obtenerColumnaEspecialidadCita();
-
-    if (!columnaEspecialidad) {
-      await eliminarEspecialidadFallback(
-        idCita
-      );
-    }
-
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "ELIMINACION_CITA",
-      descripcion: `Eliminada cita ID ${idCita}`,
-      modulo: "CITAS",
-      idRegistro: idCita,
-      tabla: "TBL_CITAS",
-      estado: "EXITO",
-      req,
-    });
-
-    return res.json({
-      success: true,
-      message: "Cita eliminada correctamente.",
-      idCita,
-    });
-  } catch (error) {
-    console.error(
-      "DELETE /citas/eliminar/:id error:",
-      error
-    );
-
-    await registrarEventoBitacora({
-      usuario: getUsuario(req),
-      accion: "ERROR_ELIMINACION_CITA",
-      descripcion: error.message,
-      modulo: "CITAS",
-      tabla: "TBL_CITAS",
-      estado: "ERROR",
-      detalleError: error.message,
-      req,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Error eliminando la cita: " +
-        error.message,
-    });
   }
 });
 
