@@ -151,7 +151,7 @@ router.post('/cambiar-password', async (req, res) => {
       WHERE id_usuario = $3
     `, [newHashedPassword, usuario, userId]);
 
-    // Registro en bitácora
+    // Registro en bitácora con los nombres correctos de columnas
     await db.query(`
       INSERT INTO tbl_ms_bitacora (
         id_usuario, accion, descripcion, modulo, 
