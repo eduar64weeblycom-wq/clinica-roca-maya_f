@@ -46,19 +46,17 @@ async function registrarBitacora({
       ? req.get("User-Agent") || "Desconocido"
       : "Sistema";
 
-    // Inserción directa en la tabla de bitácora para evitar conflictos de tipos con el procedimiento almacenado
+    // Inserción directa corregida sin ID_REGISTRO ni TABLA
     await pool.query(
       `INSERT INTO "TBL_MS_BITACORA" (
-        "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", "ID_REGISTRO", 
-        "TABLA", "IP_CLIENTE", "USER_AGENT", "ESTADO", "DETALLE_ERROR", "ORIGEN", "FECHA"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
+        "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", 
+        "IP_CLIENTE", "USER_AGENT", "ESTADO", "DETALLE_ERROR", "ORIGEN", "FECHA"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
       [
         idUsuario,
         accion,
         descripcion,
         modulo,
-        idRegistro,
-        tabla,
         ipCliente,
         userAgent,
         estado,
