@@ -77,7 +77,7 @@
               required 
               minlength="5"
               maxlength="25" 
-              value="<%= typeof usuario !== 'undefined' ? usuario : '' %>"
+              value="<%= (typeof usuario !== 'undefined' && typeof usuario === 'string') ? usuario : ((typeof usuario !== 'undefined' && usuario && usuario.USUARIO) ? usuario.USUARIO : '') %>"
               autocomplete="off"
             >
           </div>

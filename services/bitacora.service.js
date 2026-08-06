@@ -16,28 +16,22 @@ async function registrarBitacora({
 
     // Buscar el ID del usuario
     if (usuario && typeof usuario === "string") {
-  const [rows] = await pool.query(
-    "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE USUARIO = $1",
-    [usuario]
-  );
-  if (rows.length) idUsuario = rows[0].ID_USUARIO;
-} else if (typeof usuario === "number") {
-  idUsuario = usuario;
-}
-
-// Si no se encontró usuario, usar el admin por defecto
-if (!idUsuario) {
-  const [sys] = await pool.query(
-    "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE USUARIO = 'ADMIN'"
-  );
-  idUsuario = sys && sys.length ? sys[0].ID_USUARIO : 1;
-}
+      const resultado = await pool.query(
+        `SELECT "ID_USUARIO" FROM "TBL_MS_USUARIO" WHERE "USUARIO" = $1`,
+        [usuario]
+      );
+      const rows = resultado.rows; // 👈 Extraemos .rows correctamente
+      if (rows.length) idUsuario = rows[0].ID_USUARIO;
+    } else if (typeof usuario === "number") {
+      idUsuario = usuario;
+    }
 
     // Si no se encontró usuario, usar el admin por defecto
     if (!idUsuario) {
-      const [sys] = await pool.query(
-        "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE USUARIO = 'ADMIN'"
+      const resultadoSys = await pool.query(
+        `SELECT "ID_USUARIO" FROM "TBL_MS_USUARIO" WHERE "USUARIO" = 'ADMIN'`
       );
+      const sys = resultadoSys.rows; // 👈 Extraemos .rows correctamente
       idUsuario = sys && sys.length ? sys[0].ID_USUARIO : 1;
     }
 
@@ -52,9 +46,9 @@ if (!idUsuario) {
       ? req.get("User-Agent") || "Desconocido"
       : "Sistema";
 
-    // Registrar en la bitácora (usa tu procedimiento almacenado)
+    // Registrar en la bitácora usando la sintaxis correcta de parámetros posicionales ($1, $2...) para PostgreSQL
     await pool.query(
-      "CALL SP_REGISTRAR_BITACORA(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      `CALL SP_REGISTRAR_BITACORA($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         idUsuario,
         accion,
