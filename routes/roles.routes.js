@@ -1,31 +1,31 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../database/db');
+const pool = require('../database/db'); // PostgreSQL pool (pg)
 
 // ============================================================
 // GET /roles - Vista principal de roles
 // ============================================================
 router.get("/", async (req, res) => {
   try {
-    const [roles] = await pool.query(`
-      SELECT ID_ROL, ROL, DESCRIPCION, ESTADO, FECHA_CREACION 
-      FROM TBL_MS_ROLES 
-      ORDER BY ID_ROL
+    const { rows: roles } = await pool.query(`
+      SELECT id_rol, rol, descripcion, estado, fecha_creacion 
+      FROM tbl_ms_roles 
+      ORDER BY id_rol
     `);
     
-    const [objetos] = await pool.query(`
-      SELECT ID_OBJETO, OBJETO, DESCRIPCION, TIPO_OBJETO 
-      FROM TBL_OBJETOS 
-      ORDER BY ID_OBJETO
+    const { rows: objetos } = await pool.query(`
+      SELECT id_objeto, objeto, descripcion, tipo_objeto 
+      FROM tbl_objetos 
+      ORDER BY id_objeto
     `);
     
-    const [permisos] = await pool.query(`
-      SELECT p.ID_PERMISO, p.ID_ROL, p.ID_OBJETO, 
-             p.PERMISO_CONSULTA,
-             o.OBJETO
-      FROM TBL_PERMISOS p
-      INNER JOIN TBL_OBJETOS o ON p.ID_OBJETO = o.ID_OBJETO
-      ORDER BY p.ID_ROL, o.ID_OBJETO
+    const { rows: permisos } = await pool.query(`
+      SELECT p.id_permiso, p.id_rol, p.id_objeto, 
+             p.permiso_consulta,
+             o.objeto
+      FROM tbl_permisos p
+      INNER JOIN tbl_objetos o ON p.id_objeto = o.id_objeto
+      ORDER BY p.id_rol, o.id_objeto
     `);
     
     console.log('📋 Roles cargados:', roles.length);
@@ -49,10 +49,10 @@ router.get("/", async (req, res) => {
 // ============================================================
 router.get("/api/roles", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT ID_ROL, ROL, DESCRIPCION, ESTADO 
-       FROM TBL_MS_ROLES 
-       ORDER BY ID_ROL`
+    const { rows } = await pool.query(
+      `SELECT id_rol, rol, descripcion, estado 
+       FROM tbl_ms_roles 
+       ORDER BY id_rol`
     );
     res.json({ ok: true, roles: rows });
   } catch (error) {
@@ -66,10 +66,10 @@ router.get("/api/roles", async (req, res) => {
 // ============================================================
 router.get("/api/todos", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT ID_ROL, ROL, DESCRIPCION, ESTADO 
-       FROM TBL_MS_ROLES 
-       ORDER BY ID_ROL`
+    const { rows } = await pool.query(
+      `SELECT id_rol, rol, descripcion, estado 
+       FROM tbl_ms_roles 
+       ORDER BY id_rol`
     );
     res.json({ ok: true, roles: rows });
   } catch (error) {
@@ -83,10 +83,10 @@ router.get("/api/todos", async (req, res) => {
 // ============================================================
 router.get("/api/objetos", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT ID_OBJETO, OBJETO, DESCRIPCION, TIPO_OBJETO 
-       FROM TBL_OBJETOS 
-       ORDER BY ID_OBJETO`
+    const { rows } = await pool.query(
+      `SELECT id_objeto, objeto, descripcion, tipo_objeto 
+       FROM tbl_objetos 
+       ORDER BY id_objeto`
     );
     res.json({ ok: true, objetos: rows });
   } catch (error) {
@@ -102,14 +102,14 @@ router.get("/api/permisos/:idRol", async (req, res) => {
   try {
     const { idRol } = req.params;
     
-    const [permisos] = await pool.query(`
-      SELECT p.ID_PERMISO, p.ID_ROL, p.ID_OBJETO, 
-             p.PERMISO_CONSULTA,
-             o.OBJETO, o.DESCRIPCION AS OBJETO_DESCRIPCION
-      FROM TBL_PERMISOS p
-      INNER JOIN TBL_OBJETOS o ON p.ID_OBJETO = o.ID_OBJETO
-      WHERE p.ID_ROL = ?
-      ORDER BY o.ID_OBJETO
+    const { rows: permisos } = await pool.query(`
+      SELECT p.id_permiso, p.id_rol, p.id_objeto, 
+             p.permiso_consulta,
+             o.objeto, o.descripcion AS objeto_descripcion
+      FROM tbl_permisos p
+      INNER JOIN tbl_objetos o ON p.id_objeto = o.id_objeto
+      WHERE p.id_rol = $1
+      ORDER BY o.id_objeto
     `, [idRol]);
     
     res.json({ ok: true, permisos });
@@ -130,23 +130,28 @@ router.post("/api/permisos/guardar", async (req, res) => {
       return res.status(400).json({ ok: false, msg: "ID de rol requerido" });
     }
     
-    await pool.query(`DELETE FROM TBL_PERMISOS WHERE ID_ROL = ?`, [idRol]);
+    // Eliminar permisos existentes
+    await pool.query(`DELETE FROM tbl_permisos WHERE id_rol = $1`, [idRol]);
     
     if (permisos && permisos.length > 0) {
-      const values = permisos.map(p => [
-        idRol,
-        p.idObjeto,
-        p.consulta ? 1 : 0,
-        usuarioAccion || 'SISTEMA'
-      ]);
+      // Construir consulta INSERT con múltiples valores
+      const values = [];
+      const placeholders = [];
+      let paramIndex = 1;
+      
+      permisos.forEach(p => {
+        values.push(idRol, p.idObjeto, p.consulta ? 1 : 0, usuarioAccion || 'SISTEMA');
+        placeholders.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3})`);
+        paramIndex += 4;
+      });
       
       const query = `
-        INSERT INTO TBL_PERMISOS 
-        (ID_ROL, ID_OBJETO, PERMISO_CONSULTA, USUARIO_CREACION) 
-        VALUES ?
+        INSERT INTO tbl_permisos 
+        (id_rol, id_objeto, permiso_consulta, usuario_creacion) 
+        VALUES ${placeholders.join(', ')}
       `;
       
-      await pool.query(query, [values]);
+      await pool.query(query, values);
     }
     
     res.json({ ok: true, msg: "Permisos guardados exitosamente" });
@@ -176,8 +181,8 @@ router.post("/api/crear", async (req, res) => {
       }
     }
 
-    const [existe] = await pool.query(
-      `SELECT ID_ROL FROM TBL_MS_ROLES WHERE UPPER(ROL) = UPPER(?)`,
+    const { rows: existe } = await pool.query(
+      `SELECT id_rol FROM tbl_ms_roles WHERE UPPER(rol) = UPPER($1)`,
       [rol.trim()]
     );
     
@@ -185,30 +190,35 @@ router.post("/api/crear", async (req, res) => {
       return res.status(400).json({ ok: false, msg: "Este rol ya existe" });
     }
 
-    const [result] = await pool.query(
-      `INSERT INTO TBL_MS_ROLES (ROL, DESCRIPCION, ESTADO, USUARIO_CREACION) 
-       VALUES (?, ?, ?, ?)`,
+    const { rows: result } = await pool.query(
+      `INSERT INTO tbl_ms_roles (rol, descripcion, estado, usuario_creacion) 
+       VALUES ($1, $2, $3, $4)
+       RETURNING id_rol`,
       [rol.trim(), descripcion || '', estadoFinal, usuarioAccion || 'SISTEMA']
     );
 
-    const nuevoIdRol = result.insertId;
+    const nuevoIdRol = result[0].id_rol;
 
     // Asignar permisos mínimos: SOLO CONSULTA en todos los objetos
-    const [objetos] = await pool.query(`SELECT ID_OBJETO FROM TBL_OBJETOS`);
+    const { rows: objetos } = await pool.query(`SELECT id_objeto FROM tbl_objetos`);
     
     if (objetos.length > 0) {
-      const values = objetos.map(o => [
-        nuevoIdRol,
-        o.ID_OBJETO,
-        0,  // PERMISO_CONSULTA
-        usuarioAccion || 'SISTEMA'
-      ]);
+      // Construir INSERT múltiple
+      const values = [];
+      const placeholders = [];
+      let paramIndex = 1;
+      
+      objetos.forEach(o => {
+        values.push(nuevoIdRol, o.id_objeto, 0, usuarioAccion || 'SISTEMA');
+        placeholders.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3})`);
+        paramIndex += 4;
+      });
       
       await pool.query(`
-        INSERT INTO TBL_PERMISOS 
-        (ID_ROL, ID_OBJETO, PERMISO_CONSULTA, USUARIO_CREACION) 
-        VALUES ?
-      `, [values]);
+        INSERT INTO tbl_permisos 
+        (id_rol, id_objeto, permiso_consulta, usuario_creacion) 
+        VALUES ${placeholders.join(', ')}
+      `, values);
     }
 
     res.json({ 
@@ -245,9 +255,9 @@ router.put("/api/actualizar/:id", async (req, res) => {
       }
     }
 
-    const [existe] = await pool.query(
-      `SELECT ID_ROL FROM TBL_MS_ROLES 
-       WHERE UPPER(ROL) = UPPER(?) AND ID_ROL != ?`,
+    const { rows: existe } = await pool.query(
+      `SELECT id_rol FROM tbl_ms_roles 
+       WHERE UPPER(rol) = UPPER($1) AND id_rol != $2`,
       [rol.trim(), id]
     );
     
@@ -255,14 +265,18 @@ router.put("/api/actualizar/:id", async (req, res) => {
       return res.status(400).json({ ok: false, msg: "Ya existe otro rol con ese nombre" });
     }
 
-    await pool.query(
-      `UPDATE TBL_MS_ROLES 
-       SET ROL = ?, DESCRIPCION = ?, ESTADO = ?,
-           FECHA_MODIFICACION = CURRENT_TIMESTAMP, 
-           USUARIO_MODIFICACION = ? 
-       WHERE ID_ROL = ?`,
+    const { rowCount } = await pool.query(
+      `UPDATE tbl_ms_roles 
+       SET rol = $1, descripcion = $2, estado = $3,
+           fecha_modificacion = CURRENT_TIMESTAMP, 
+           usuario_modificacion = $4 
+       WHERE id_rol = $5`,
       [rol.trim(), descripcion || '', estadoFinal, usuarioAccion || 'SISTEMA', id]
     );
+
+    if (rowCount === 0) {
+      return res.status(404).json({ ok: false, msg: "Rol no encontrado" });
+    }
 
     res.json({ ok: true, msg: "Rol actualizado exitosamente" });
 
@@ -287,28 +301,37 @@ router.delete("/api/eliminar/:id", async (req, res) => {
       });
     }
 
-    const [usuarios] = await pool.query(
-      `SELECT COUNT(*) as total FROM TBL_MS_USUARIO WHERE ID_ROL = ?`,
+    const { rows: usuarios } = await pool.query(
+      `SELECT COUNT(*) as total FROM tbl_ms_usuario WHERE id_rol = $1`,
       [id]
     );
 
-    if (usuarios[0].total > 0) {
+    const totalUsuarios = parseInt(usuarios[0].total, 10);
+    if (totalUsuarios > 0) {
       return res.status(400).json({ 
         ok: false, 
-        msg: `No se puede eliminar el rol porque tiene ${usuarios[0].total} usuarios asociados.` 
+        msg: `No se puede eliminar el rol porque tiene ${totalUsuarios} usuarios asociados.` 
       });
     }
 
-    await pool.query(`DELETE FROM TBL_PERMISOS WHERE ID_ROL = ?`, [id]);
+    // Eliminar permisos asociados
+    await pool.query(`DELETE FROM tbl_permisos WHERE id_rol = $1`, [id]);
 
-    const [rolData] = await pool.query(
-      `SELECT ROL FROM TBL_MS_ROLES WHERE ID_ROL = ?`,
+    const { rows: rolData } = await pool.query(
+      `SELECT rol FROM tbl_ms_roles WHERE id_rol = $1`,
       [id]
     );
 
-    await pool.query(`DELETE FROM TBL_MS_ROLES WHERE ID_ROL = ?`, [id]);
+    const { rowCount } = await pool.query(
+      `DELETE FROM tbl_ms_roles WHERE id_rol = $1`,
+      [id]
+    );
 
-    res.json({ ok: true, msg: `Rol "${rolData[0]?.ROL || 'ID ' + id}" eliminado exitosamente` });
+    if (rowCount === 0) {
+      return res.status(404).json({ ok: false, msg: "Rol no encontrado" });
+    }
+
+    res.json({ ok: true, msg: `Rol "${rolData[0]?.rol || 'ID ' + id}" eliminado exitosamente` });
 
   } catch (error) {
     console.error("❌ Error en DELETE /roles/api/eliminar:", error);
