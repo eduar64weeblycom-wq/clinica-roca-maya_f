@@ -1,4 +1,3 @@
-// middleware/auth.middleware.js
 const pool = require("../database/db");
 
 // Middleware para verificar que el usuario tiene sesión activa y su rol está ACTIVO
@@ -10,13 +9,13 @@ const verificarSesion = async (req, res, next) => {
   }
   
   try {
-    // 🔍 Obtener estado del usuario y estado del rol
- const [rows] = await pool.query(`
-  SELECT u.ESTADO AS ESTADO_USUARIO, r.ESTADO AS ESTADO_ROL
-  FROM TBL_MS_USUARIO u
-  INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-  WHERE u.USUARIO = $1
-`, [usuario]);
+    // 🔍 Obtener estado del usuario y estado del rol usando comillas dobles para PostgreSQL
+    const [rows] = await pool.query(`
+      SELECT u."ESTADO" AS "ESTADO_USUARIO", r."ESTADO" AS "ESTADO_ROL"
+      FROM "TBL_MS_USUARIO" u
+      INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
+      WHERE u."USUARIO" = $1
+    `, [usuario]);
     
     if (rows.length === 0) {
       res.clearCookie("user");
@@ -33,7 +32,6 @@ const verificarSesion = async (req, res, next) => {
     
     // ✅ Verificar estado del rol (debe ser ACTIVO)
     if (ESTADO_ROL !== 'ACTIVO') {
-      // El rol del usuario está INACTIVO → cerrar sesión
       res.clearCookie("user");
       return res.redirect("/auth/login?error=Su rol ha sido desactivado. Contacte al administrador.");
     }
@@ -50,18 +48,19 @@ const verificarSesion = async (req, res, next) => {
 const obtenerRolUsuario = async (usuario) => {
   try {
     const [rows] = await pool.query(`
-      SELECT r.ROL
-      FROM TBL_MS_USUARIO u
-      INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-      WHERE u.USUARIO = $1
+      SELECT r."ROL"
+      FROM "TBL_MS_USUARIO" u
+      INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
+      WHERE u."USUARIO" = $1
     `, [usuario]);
-
+    
     return rows.length > 0 ? rows[0].ROL : null;
   } catch (error) {
     console.error("Error obteniendo rol:", error);
     return null;
   }
 };
+
 // Middleware para verificar permisos específicos (por rol)
 const verificarPermiso = (rolesPermitidos) => {
   return async (req, res, next) => {

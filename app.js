@@ -92,19 +92,19 @@ app.use(async (req, res, next) => {
   
   if (usuario) {
     try {
-   const [userData] = await pool.query(`
-  SELECT 
-    u.ID_USUARIO,
-    u.USUARIO,
-    u.NOMBRE_USUARIO,
-    u.ESTADO,
-    u.CORREO_ELECTRONICO,
-    r.ROL,
-    r.ID_ROL
-  FROM TBL_MS_USUARIO u
-  INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-  WHERE u.USUARIO = $1
-`, [usuario]);
+      const [userData] = await pool.query(`
+        SELECT 
+          u."ID_USUARIO",
+          u."USUARIO",
+          u."NOMBRE_USUARIO",
+          u."ESTADO",
+          u."CORREO_ELECTRONICO",
+          r."ROL",
+          r."ID_ROL"
+        FROM "TBL_MS_USUARIO" u
+        INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
+        WHERE u."USUARIO" = $1
+      `, [usuario]);
       
       if (userData.length > 0) {
         req.user = userData[0];
@@ -132,7 +132,6 @@ app.use(async (req, res, next) => {
   }
   next();
 });
-
 // ============================================================
 // AUTO-CIERRE DE CONSULTAS MÉDICAS (SERVICE INTERNO)
 // ============================================================
