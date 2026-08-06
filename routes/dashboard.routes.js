@@ -16,8 +16,9 @@ router.get("/", async (req, res) => {
     const usuario = req.usuarioActual;
     const esPrimerIngreso = req.esPrimerIngreso || false;
 
+    // Consulta corregida sin la columna "ESTADO" en TBL_MS_USUARIO
     const resultadoUser = await db.query(`
-      SELECT u."ID_USUARIO", u."USUARIO", u."NOMBRE_USUARIO", u."CORREO_ELECTRONICO", u."ESTADO", r."ROL", r."ID_ROL"
+      SELECT u."ID_USUARIO", u."USUARIO", u."NOMBRE_USUARIO", u."CORREO_ELECTRONICO", r."ROL", r."ID_ROL"
       FROM "TBL_MS_USUARIO" u
       INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
       WHERE u."USUARIO" = $1
@@ -32,8 +33,7 @@ router.get("/", async (req, res) => {
     const rol = userData[0].ROL;
     const nombreUsuario = userData[0].NOMBRE_USUARIO;
     const email = userData[0].CORREO_ELECTRONICO || null;
-    const estado = userData[0].ESTADO;
-    const esNuevo = (estado && estado.toUpperCase() === 'NUEVO') || esPrimerIngreso;
+    const esNuevo = esPrimerIngreso;
 
     let stats = { pacientes: 0, citasHoy: 0, consultasDiarias: 0, medicamentos: 0 };
     if (!esNuevo) {
@@ -114,8 +114,9 @@ router.post('/cambiar-password', async (req, res) => {
       });
     }
 
+    // Consulta corregida sin la columna "ESTADO"
     const resUser = await db.query(`
-      SELECT "ID_USUARIO", "CONTRASENA", "ESTADO" 
+      SELECT "ID_USUARIO", "CONTRASENA" 
       FROM "TBL_MS_USUARIO" 
       WHERE "USUARIO" = $1
     `, [usuario]);
@@ -128,7 +129,6 @@ router.post('/cambiar-password', async (req, res) => {
 
     const userId = userData[0].ID_USUARIO;
     const hashedPassword = userData[0].CONTRASENA;
-    const estadoActual = userData[0].ESTADO || '';
 
     const isMatch = await bcrypt.compare(currentPassword, hashedPassword);
     if (!isMatch) {
@@ -144,18 +144,17 @@ router.post('/cambiar-password', async (req, res) => {
     }
 
     const newHashedPassword = await bcrypt.hash(newPassword, 10);
-    const nuevoEstado = estadoActual.toUpperCase() === 'NUEVO' ? 'ACTIVO' : estadoActual;
 
+    // Actualización de contraseña sin modificar la columna ESTADO inexistente
     await db.query(`
       UPDATE "TBL_MS_USUARIO" 
       SET "CONTRASENA" = $1, 
-          "ESTADO" = $2,
           "FECHA_MODIFICACION" = NOW(),
-          "USUARIO_MODIFICACION" = $3
-      WHERE "ID_USUARIO" = $4
-    `, [newHashedPassword, nuevoEstado, usuario, userId]);
+          "USUARIO_MODIFICACION" = $2
+      WHERE "ID_USUARIO" = $3
+    `, [newHashedPassword, usuario, userId]);
 
-    // Bitácora corregida sin ID_REGISTRO
+    // Registro en bitácora
     await db.query(`
       INSERT INTO "TBL_MS_BITACORA" (
         "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", 
@@ -164,7 +163,7 @@ router.post('/cambiar-password', async (req, res) => {
     `, [
       userId,
       'CAMBIO_CONTRASENA',
-      `Usuario ${usuario} cambió su contraseña${estadoActual === 'NUEVO' ? ' (primer ingreso)' : ''}`,
+      `Usuario ${usuario} cambió su contraseña`,
       'SEGURIDAD',
       'TBL_MS_USUARIO',
       req.ip || null,
