@@ -37,10 +37,7 @@ router.post("/api/register", async (req, res) => {
     console.log(" Validando contraseña:", contrasena);
     console.log(" Longitud:", contrasena ? contrasena.length : 0);
     console.log(" ID_Rol recibido:", id_rol);
-    // ============================================================
-    // VALIDACIONES
-    // ============================================================
-
+    
     // 1. Validar campos requeridos
     if (!nombre_completo || !usuario || !contrasena || !confirm_contrasena || !correo_electronico) {
       console.log(" Campos faltantes");
@@ -83,21 +80,21 @@ router.post("/api/register", async (req, res) => {
     console.log(" Contraseña válida");
 
     // 5. Verificar si el usuario ya existe (INSENSIBLE a mayúsculas)
-    const [userExists] = await db.query(
-      "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE UPPER(USUARIO) = UPPER(?)",
+    const userExistsResult = await db.query(
+      "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE UPPER(USUARIO) = UPPER($1)",
       [usuario]
     );
-    if (userExists.length > 0) {
+    if (userExistsResult.rows.length > 0) {
       console.log(" Usuario ya existe:", usuario);
       return res.status(400).json({ success: false, error: "El usuario ya existe" });
     }
 
     // 6. Verificar si el correo ya existe
-    const [emailExists] = await db.query(
-      "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE CORREO_ELECTRONICO = ?",
+    const emailExistsResult = await db.query(
+      "SELECT ID_USUARIO FROM TBL_MS_USUARIO WHERE CORREO_ELECTRONICO = $1",
       [correo_electronico]
     );
-    if (emailExists.length > 0) {
+    if (emailExistsResult.rows.length > 0) {
       console.log(" Correo ya existe:", correo_electronico);
       return res.status(400).json({ success: false, error: "El correo ya está registrado" });
     }
@@ -106,84 +103,65 @@ router.post("/api/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(contrasena, 10);
 
     // ============================================================
-    // INSERTAR USUARIO - CON ESTADO 'ACTIVO'
+    // INSERTAR USUARIO - CON ESTADO 'NUEVO'
     // ============================================================
     const rol = id_rol ? parseInt(id_rol) : 5;
     console.log(" Rol a asignar:", rol);
 
-    const [result] = await db.query(
+    const insertResult = await db.query(
       `INSERT INTO TBL_MS_USUARIO 
        (USUARIO, NOMBRE_USUARIO, CONTRASENA, CORREO_ELECTRONICO, ESTADO, ID_ROL)
-       VALUES (?, ?, ?, ?, 'NUEVO', ?)`,
+       VALUES ($1, $2, $3, $4, 'NUEVO', $5) RETURNING ID_USUARIO`,
       [usuario, nombre_completo, hashedPassword, correo_electronico, rol]
     );
 
-    console.log(" Usuario insertado con ID:", result.insertId, "Rol:", rol, "Estado: ACTIVO");
+    const insertId = insertResult.rows[0].id_usuario || insertResult.rows[0].ID_USUARIO;
+    console.log(" Usuario insertado con ID:", insertId, "Rol:", rol, "Estado: NUEVO");
 
     // ============================================================
-    //  ENVIAR CORREO ELECTRÓNICO CON CREDENCIALES (TU VERSIÓN)
+    // ENVIAR CORREO ELECTRÓNICO CON CREDENCIALES
     // ============================================================
     let emailSent = false;
     try {
       const subject = ' Bienvenido a Clínicas Roca Maya - Credenciales de acceso';
-      
       const html = `
         <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8f9fa; border-radius: 10px;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h2 style="color: #1a5276; margin: 0;"> Clínicas Roca Maya</h2>
             <p style="color: #2e86c1; font-size: 16px; margin: 5px 0;">Tu salud es nuestra seguridad</p>
           </div>
-          
           <div style="background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             <p style="font-size: 16px; color: #333;">Estimado(a) <strong>${nombre_completo}</strong>,</p>
-            
             <p style="color: #555; font-size: 15px; line-height: 1.6;">
               Se ha creado su cuenta en el sistema <strong>Clínicas Roca Maya</strong>. 
               A continuación, encontrará sus credenciales de acceso:
             </p>
-            
             <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #1a5276;">
               <p style="margin: 5px 0; font-size: 14px;"><strong> Usuario:</strong> <span style="color: #1a5276;">${usuario}</span></p>
               <p style="margin: 5px 0; font-size: 14px;"><strong> Contraseña:</strong> <span style="color: #1a5276; font-weight: bold;">${contrasena}</span></p>
             </div>
-            
             <div style="background: #d4edda; padding: 12px; border-radius: 8px; border-left: 4px solid #28a745; margin: 15px 0;">
               <p style="margin: 0; font-size: 14px; color: #155724;">
                 <strong> Cuenta activa:</strong> 
                 Ya puedes iniciar sesión con tus credenciales.
               </p>
             </div>
-            
             <p style="color: #555; font-size: 14px; line-height: 1.6; margin-top: 15px;">
               <strong>Para iniciar sesión:</strong>
-              <br>
-              1. Visite: <a href="http://localhost:3000/auth/login" style="color: #1a5276; text-decoration: none;">http://localhost:3000/auth/login</a>
-              <br>
-              2. Ingrese su usuario y contraseña
-              <br>
-              3. Puede cambiar su contraseña desde el menú de configuración ()
+              <br>1. Visite: <a href="http://localhost:3000/auth/login" style="color: #1a5276; text-decoration: none;">http://localhost:3000/auth/login</a>
+              <br>2. Ingrese su usuario y contraseña
             </p>
-            
             <div style="border-top: 1px solid #e9ecef; margin-top: 20px; padding-top: 15px; text-align: center;">
               <p style="color: #6c757d; font-size: 12px; margin: 0;">
                 Este es un mensaje automático, por favor no responda a este correo.
-                <br>
-                © ${new Date().getFullYear()} Clínicas Roca Maya - Todos los derechos reservados.
+                <br>© ${new Date().getFullYear()} Clínicas Roca Maya - Todos los derechos reservados.
               </p>
             </div>
           </div>
         </div>
       `;
 
-      // Enviar correo
       emailSent = await enviarCorreo(correo_electronico, subject, html);
-      
-      if (emailSent) {
-        console.log(` Correo enviado exitosamente a: ${correo_electronico}`);
-      } else {
-        console.warn(` No se pudo enviar correo a: ${correo_electronico}`);
-      }
-
     } catch (emailError) {
       console.error(' Error al enviar correo:', emailError);
     }
@@ -195,7 +173,7 @@ router.post("/api/register", async (req, res) => {
         accion: "REGISTRO_MODAL",
         descripcion: `Nuevo usuario registrado desde modal: ${usuario} con rol ${rol}`,
         modulo: "AUTENTICACION",
-        idRegistro: result.insertId,
+        idRegistro: insertId,
         tabla: "TBL_MS_USUARIO",
         estado: "EXITO",
         req
@@ -216,7 +194,7 @@ router.post("/api/register", async (req, res) => {
       message: mensaje,
       email_enviado: emailSent,
       data: {
-        id: result.insertId,
+        id: insertId,
         usuario: usuario,
         rol: rol
       }
@@ -236,7 +214,6 @@ router.post("/api/register", async (req, res) => {
 // ================================
 router.get("/register", (req, res) => {
   console.log(" GET /auth/register - Mostrando formulario de registro");
-  console.log("   Query params:", req.query);
   res.render("register", { error: req.query.error, success: req.query.success });
 });
 
@@ -263,13 +240,13 @@ router.post("/register", async (req, res) => {
       return res.redirect("/auth/register?error=La contraseña debe incluir letras, números y un símbolo");
     }
 
-    const [userExists] = await db.query("SELECT * FROM TBL_MS_USUARIO WHERE UPPER(USUARIO) = UPPER(?)", [usuario]);
-    if (userExists.length > 0) {
+    const userExistsResult = await db.query("SELECT * FROM TBL_MS_USUARIO WHERE UPPER(USUARIO) = UPPER($1)", [usuario]);
+    if (userExistsResult.rows.length > 0) {
       return res.redirect("/auth/register?error=El usuario ya existe");
     }
 
-    const [emailExists] = await db.query("SELECT * FROM TBL_MS_USUARIO WHERE CORREO_ELECTRONICO = ?", [correo_electronico]);
-    if (emailExists.length > 0) {
+    const emailExistsResult = await db.query("SELECT * FROM TBL_MS_USUARIO WHERE CORREO_ELECTRONICO = $1", [correo_electronico]);
+    if (emailExistsResult.rows.length > 0) {
       return res.redirect("/auth/register?error=El correo ya está registrado");
     }
 
@@ -279,44 +256,26 @@ router.post("/register", async (req, res) => {
     await db.query(
       `INSERT INTO TBL_MS_USUARIO 
        (USUARIO, NOMBRE_USUARIO, CONTRASENA, CORREO_ELECTRONICO, ESTADO, ID_ROL)
-       VALUES (?, ?, ?, ?, 'NUEVO', ?)`,
+       VALUES ($1, $2, $3, $4, 'NUEVO', $5)`,
       [usuario, nombre_completo, hashedPassword, correo_electronico, ID_ROL]
     );
 
-    //  Enviar correo con credenciales (TU VERSIÓN)
     try {
       const subject = ' Bienvenido a Clínicas Roca Maya - Credenciales de acceso';
       const html = `
         <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8f9fa; border-radius: 10px;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h2 style="color: #1a5276; margin: 0;"> Clínicas Roca Maya</h2>
-            <p style="color: #2e86c1; font-size: 16px; margin: 5px 0;">Tu salud es nuestra seguridad</p>
           </div>
-          <div style="background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <p style="font-size: 16px; color: #333;">Estimado(a) <strong>${nombre_completo}</strong>,</p>
-            <p style="color: #555; font-size: 15px; line-height: 1.6;">Se ha creado su cuenta en el sistema <strong>Clínicas Roca Maya</strong>.</p>
-            <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #1a5276;">
-              <p style="margin: 5px 0; font-size: 14px;"><strong> Usuario:</strong> <span style="color: #1a5276;">${usuario}</span></p>
-              <p style="margin: 5px 0; font-size: 14px;"><strong> Contraseña:</strong> <span style="color: #1a5276; font-weight: bold;">${contrasena}</span></p>
-            </div>
-            <div style="background: #d4edda; padding: 12px; border-radius: 8px; border-left: 4px solid #28a745; margin: 15px 0;">
-              <p style="margin: 0; font-size: 14px; color: #155724;"><strong> Cuenta activa:</strong> Ya puedes iniciar sesión con tus credenciales.</p>
-            </div>
-            <p style="color: #555; font-size: 14px; line-height: 1.6; margin-top: 15px;">
-              <strong>Para iniciar sesión:</strong>
-              <br>1. Visite: <a href="http://localhost:3000/auth/login" style="color: #1a5276;">http://localhost:3000/auth/login</a>
-              <br>2. Ingrese su usuario y contraseña
-              <br>3. Puede cambiar su contraseña desde el menú de configuración (⚙️)
-            </p>
-            <div style="border-top: 1px solid #e9ecef; margin-top: 20px; padding-top: 15px; text-align: center;">
-              <p style="color: #6c757d; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} Clínicas Roca Maya</p>
-            </div>
+          <div style="background: white; padding: 25px; border-radius: 10px;">
+            <p>Estimado(a) <strong>${nombre_completo}</strong>,</p>
+            <p>Se ha creado su cuenta en el sistema <strong>Clínicas Roca Maya</strong>.</p>
+            <p><strong>Usuario:</strong> ${usuario}</p>
+            <p><strong>Contraseña:</strong> ${contrasena}</p>
           </div>
         </div>
       `;
-
       await enviarCorreo(correo_electronico, subject, html);
-      console.log(` Correo enviado a: ${correo_electronico}`);
     } catch (emailError) {
       console.error(' Error al enviar correo:', emailError);
     }
@@ -336,7 +295,7 @@ router.post("/register", async (req, res) => {
 });
 
 // ================================
-// LOGIN - SIMPLIFICADO (ACTIVO)
+// LOGIN
 // ================================
 router.post("/login", async (req, res) => {
   console.log(" POST /login - Iniciando sesión");
@@ -348,51 +307,55 @@ router.post("/login", async (req, res) => {
       return res.redirect("/auth/login?error=Usuario y contraseña son requeridos");
     }
 
-    const [rows] = await db.query(
-      "SELECT * FROM TBL_MS_USUARIO WHERE UPPER(USUARIO) = UPPER(?)",
+    const result = await db.query(
+      "SELECT * FROM TBL_MS_USUARIO WHERE UPPER(USUARIO) = UPPER($1)",
       [nombre_usuario]
     );
     
+    const rows = result.rows;
     if (rows.length === 0) {
       return res.redirect("/auth/login?error=Usuario no encontrado");
     }
 
     const user = rows[0];
+    console.log("Usuario encontrado:", user.usuario || user.USUARIO, "Estado:", user.estado || user.ESTADO);
 
-    // ✅ Log para depuración
-    console.log("Usuario encontrado:", user.USUARIO, "Estado:", user.ESTADO);
+    const estadoUser = user.estado || user.ESTADO;
+    const idUsuario = user.id_usuario || user.ID_USUARIO;
+    const passwordHash = user.contrasena || user.CONTRASENA;
+    const usernameReal = user.usuario || user.USUARIO;
 
-    // Verificar estado - permitir ACTIVO y NUEVO
-    if (user.ESTADO === 'INACTIVO') {
+    if (estadoUser === 'INACTIVO') {
       return res.redirect("/auth/login?error=Usuario inactivo. Contacte al administrador.");
     }
 
-    if (user.ESTADO === 'BLOQUEADO') {
+    if (estadoUser === 'BLOQUEADO') {
       return res.redirect("/auth/login?error=Usuario bloqueado por intentos fallidos.");
     }
 
-    // ✅ Si el estado no es ACTIVO ni NUEVO, denegar
-    if (user.ESTADO !== 'ACTIVO' && user.ESTADO !== 'NUEVO') {
+    if (estadoUser !== 'ACTIVO' && estadoUser !== 'NUEVO') {
       return res.redirect("/auth/login?error=Estado de usuario no válido.");
     }
 
-    const validPassword = await bcrypt.compare(password, user.CONTRASENA);
+    const validPassword = await bcrypt.compare(password, passwordHash);
 
     if (!validPassword) {
       await db.query(
-        "UPDATE TBL_MS_USUARIO SET INTENTOS_FALLIDOS = INTENTOS_FALLIDOS + 1 WHERE ID_USUARIO = ?",
-        [user.ID_USUARIO]
+        "UPDATE TBL_MS_USUARIO SET INTENTOS_FALLIDOS = COALESCE(INTENTOS_FALLIDOS, 0) + 1 WHERE ID_USUARIO = $1",
+        [idUsuario]
       );
       
-      const [intentos] = await db.query(
-        "SELECT INTENTOS_FALLIDOS FROM TBL_MS_USUARIO WHERE ID_USUARIO = ?",
-        [user.ID_USUARIO]
+      const intentosResult = await db.query(
+        "SELECT INTENTOS_FALLIDOS FROM TBL_MS_USUARIO WHERE ID_USUARIO = $1",
+        [idUsuario]
       );
       
-      if (intentos[0]?.INTENTOS_FALLIDOS >= 3) {
+      const intentosFallidos = intentosResult.rows[0]?.intentos_fallidos ?? intentosResult.rows[0]?.INTENTOS_FALLIDOS ?? 0;
+      
+      if (intentosFallidos >= 3) {
         await db.query(
-          "UPDATE TBL_MS_USUARIO SET ESTADO = 'BLOQUEADO' WHERE ID_USUARIO = ?",
-          [user.ID_USUARIO]
+          "UPDATE TBL_MS_USUARIO SET ESTADO = 'BLOQUEADO' WHERE ID_USUARIO = $1",
+          [idUsuario]
         );
         return res.redirect("/auth/login?error=Usuario bloqueado por exceso de intentos");
       }
@@ -400,28 +363,26 @@ router.post("/login", async (req, res) => {
       return res.redirect("/auth/login?error=Contraseña incorrecta");
     }
 
-    // Resetear intentos y actualizar última conexión
+    // Resetear intentos y actualizar última conexión (usando NOW() compatible con PostgreSQL)
     await db.query(
-      "UPDATE TBL_MS_USUARIO SET INTENTOS_FALLIDOS = 0, FECHA_ULTIMA_CONEXION = NOW() WHERE ID_USUARIO = ?",
-      [user.ID_USUARIO]
+      "UPDATE TBL_MS_USUARIO SET INTENTOS_FALLIDOS = 0, FECHA_ULTIMA_CONEXION = NOW() WHERE ID_USUARIO = $1",
+      [idUsuario]
     );
 
     // Establecer cookie
-    res.cookie("user", user.USUARIO, {
+    res.cookie("user", usernameReal, {
       httpOnly: false,
       maxAge: 1000 * 60 * 60 * 8 // 8 horas
     });
 
-    // Log para verificar que la cookie se estableció
-    console.log("Cookie establecida para:", user.USUARIO);
+    console.log("Cookie establecida para:", usernameReal);
 
     await registrarBitacora({
-      usuario: user.USUARIO,
+      usuario: usernameReal,
       accion: "LOGIN",
       descripcion: "Inicio de sesión exitoso",
     });
 
-    // Redirigir al dashboard (el middleware verificarPrimerIngreso actuará)
     res.redirect("/dashboard");
     
   } catch (err) {
@@ -434,8 +395,6 @@ router.post("/login", async (req, res) => {
 // 2FA - Configuración y verificación
 // ================================
 router.get("/setup/:userId", async (req, res) => {
-  console.log(" GET /auth/setup/:userId - Configurando 2FA para:", req.params.userId);
-  
   try {
     const { userId } = req.params;
     const secret = speakeasy.generateSecret({ 
@@ -444,7 +403,7 @@ router.get("/setup/:userId", async (req, res) => {
     });
 
     await db.query(
-      "UPDATE TBL_MS_USUARIO SET SECRET_2FA=?, ACTIVO_2FA=1 WHERE UPPER(USUARIO)=UPPER(?)",
+      "UPDATE TBL_MS_USUARIO SET SECRET_2FA=$1, ACTIVO_2FA=1 WHERE UPPER(USUARIO)=UPPER($2)",
       [secret.base32, userId]
     );
 
@@ -458,22 +417,21 @@ router.get("/setup/:userId", async (req, res) => {
 });
 
 router.post("/verify-2fa", async (req, res) => {
-  console.log(" POST /auth/verify-2fa - Verificando código 2FA");
-  
   try {
     const { userId, token } = req.body;
     
-    const [rows] = await db.query(
-      "SELECT SECRET_2FA FROM TBL_MS_USUARIO WHERE UPPER(USUARIO)=UPPER(?)",
+    const result = await db.query(
+      "SELECT SECRET_2FA FROM TBL_MS_USUARIO WHERE UPPER(USUARIO)=UPPER($1)",
       [userId]
     );
     
-    if (!rows.length) {
+    if (!result.rows.length) {
       return res.render("login-2fa", { userId, error: "Usuario no encontrado" });
     }
 
+    const secretValue = result.rows[0].secret_2fa || result.rows[0].SECRET_2FA;
     const valid = speakeasy.totp.verify({ 
-      secret: rows[0].SECRET_2FA, 
+      secret: secretValue, 
       encoding: "base32", 
       token, 
       window: 1 
@@ -503,81 +461,41 @@ router.get("/forgot-password", (req, res) => {
 router.post("/forgot-password", async (req, res) => {
   try {
     const { correo } = req.body;
-    const [rows] = await db.query("SELECT * FROM TBL_MS_USUARIO WHERE CORREO_ELECTRONICO=?", [correo]);
+    const result = await db.query("SELECT * FROM TBL_MS_USUARIO WHERE CORREO_ELECTRONICO=$1", [correo]);
 
-    if (rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.render("forgot-password", { error: "El correo no existe", success: null });
     }
 
     const codigo = crypto.randomInt(100000, 999999);
-    const usuario = rows[0].USUARIO;
+    const usuario = result.rows[0].usuario || result.rows[0].USUARIO;
 
+    // Uso de INTERVAL compatible con PostgreSQL
     await db.query(
-      "UPDATE TBL_MS_USUARIO SET CODIGO_RECUPERACION=?, EXPIRA_CODIGO=DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE UPPER(USUARIO)=UPPER(?)",
+      "UPDATE TBL_MS_USUARIO SET CODIGO_RECUPERACION=$1, EXPIRA_CODIGO=NOW() + INTERVAL '10 minutes' WHERE UPPER(USUARIO)=UPPER($2)",
       [codigo, usuario]
     );
 
-    //  DISEÑO PROFESIONAL DE CORREO (del archivo nuevo)
     const correoHtml = `
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-      <meta charset="UTF-8">
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f7f6; padding: 40px 20px;">
-        <tr>
-          <td align="center">
-            <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); max-width: 600px; width: 100%;">
-              <tr>
-                <td align="center" style="background-color: #0d6efd; padding: 35px 20px;">
-                  <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Sistema de Clínica Médica Roca Maya</h1>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 40px 30px;">
-                  <h2 style="color: #2c3e50; margin-top: 0; font-size: 22px;">Recuperación de acceso</h2>
-                  <p style="color: #555555; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
-                    Hola,</p>
-                  <p style="color: #555555; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
-                    Hemos recibido una solicitud para restablecer la contraseña de tu cuenta. Utiliza el siguiente código de seguridad para continuar con el proceso:</p>
-                  
-                  <div style="text-align: center; margin: 40px 0;">
-                    <span style="display: inline-block; font-size: 38px; font-weight: bold; color: #0d6efd; background-color: #f8f9fa; padding: 15px 35px; border-radius: 8px; border: 2px dashed #ced4da; letter-spacing: 8px;">
-                      ${codigo}
-                    </span>
-                  </div>
-                  
-                  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin-top: 30px;">
-                    <tr>
-                      <td style="padding: 15px; color: #856404; font-size: 14px; line-height: 1.5;">
-                        <strong>Atención:</strong> Este código expira en 10 minutos. 
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              <tr>
-                <td style="background-color: #f8f9fa; padding: 25px 20px; text-align: center; border-top: 1px solid #eeeeee;">
-                  <p style="color: #999999; font-size: 13px; margin: 0;">
-                    © ${new Date().getFullYear()} Clínica Médica Roca Maya.<br>Todos los derechos reservados.
-                  </p>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </body>
-    </html>
+      <!DOCTYPE html>
+      <html lang="es">
+      <head><meta charset="UTF-8"></head>
+      <body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: sans-serif;">
+        <div style="padding: 40px; background: #fff; max-width: 600px; margin: auto; border-radius: 10px;">
+          <h2 style="color: #2c3e50;">Recuperación de acceso</h2>
+          <p>Tu código de seguridad es:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <span style="font-size: 32px; font-weight: bold; color: #0d6efd; background: #f8f9fa; padding: 10px 20px; border-radius: 8px;">
+              ${codigo}
+            </span>
+          </div>
+          <p>Este código expira en 10 minutos.</p>
+        </div>
+      </body>
+      </html>
     `;
 
-    await enviarCorreo(
-      correo,
-      "Código de recuperación - Sistema Roca Maya",
-      correoHtml
-    );
-
+    await enviarCorreo(correo, "Código de recuperación - Sistema Roca Maya", correoHtml);
     res.render("verify-code", { userId: usuario, error: null });
     
   } catch (err) {
@@ -589,22 +507,24 @@ router.post("/forgot-password", async (req, res) => {
 router.post("/verify-code", async (req, res) => {
   try {
     const { userId, codigo } = req.body;
-    const [rows] = await db.query(
-      "SELECT CODIGO_RECUPERACION, EXPIRA_CODIGO FROM TBL_MS_USUARIO WHERE UPPER(USUARIO)=UPPER(?)",
+    const result = await db.query(
+      "SELECT CODIGO_RECUPERACION, EXPIRA_CODIGO FROM TBL_MS_USUARIO WHERE UPPER(USUARIO)=UPPER($1)",
       [userId]
     );
 
-    if (!rows.length) {
+    if (!result.rows.length) {
       return res.render("verify-code", { userId, error: "Usuario no encontrado" });
     }
 
-    const data = rows[0];
+    const data = result.rows[0];
+    const codRecuperacion = data.codigo_recuperacion || data.CODIGO_RECUPERACION;
+    const expiraCodigo = data.expira_codigo || data.EXPIRA_CODIGO;
 
-    if (data.CODIGO_RECUPERACION != codigo) {
+    if (codRecuperacion != codigo) {
       return res.render("verify-code", { userId, error: "Código incorrecto" });
     }
 
-    if (new Date() > new Date(data.EXPIRA_CODIGO)) {
+    if (new Date() > new Date(expiraCodigo)) {
       return res.render("verify-code", { userId, error: "El código ha expirado" });
     }
 
@@ -631,7 +551,7 @@ router.post("/reset-password", async (req, res) => {
     const hashed = await bcrypt.hash(pass1, 10);
 
     await db.query(
-      "UPDATE TBL_MS_USUARIO SET CONTRASENA=?, CODIGO_RECUPERACION=NULL, EXPIRA_CODIGO=NULL WHERE UPPER(USUARIO)=UPPER(?)",
+      "UPDATE TBL_MS_USUARIO SET CONTRASENA=$1, CODIGO_RECUPERACION=NULL, EXPIRA_CODIGO=NULL WHERE UPPER(USUARIO)=UPPER($2)",
       [hashed, userId]
     );
 
@@ -643,9 +563,6 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-// ================================
-// CIERRE DE SESIÓN
-// ================================
 router.get("/logout", (req, res) => {
   console.log(" GET /auth/logout - Cerrando sesión para usuario:", req.cookies?.user);
   res.clearCookie("user");
