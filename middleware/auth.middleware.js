@@ -11,12 +11,12 @@ const verificarSesion = async (req, res, next) => {
   
   try {
     // 🔍 Obtener estado del usuario y estado del rol
-    const [rows] = await pool.query(`
-      SELECT u.ESTADO AS ESTADO_USUARIO, r.ESTADO AS ESTADO_ROL
-      FROM TBL_MS_USUARIO u
-      INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-      WHERE u.USUARIO = ?
-    `, [usuario]);
+ const [rows] = await pool.query(`
+  SELECT u.ESTADO AS ESTADO_USUARIO, r.ESTADO AS ESTADO_ROL
+  FROM TBL_MS_USUARIO u
+  INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
+  WHERE u.USUARIO = $1
+`, [usuario]);
     
     if (rows.length === 0) {
       res.clearCookie("user");
@@ -53,16 +53,15 @@ const obtenerRolUsuario = async (usuario) => {
       SELECT r.ROL
       FROM TBL_MS_USUARIO u
       INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-      WHERE u.USUARIO = ?
+      WHERE u.USUARIO = $1
     `, [usuario]);
-    
+
     return rows.length > 0 ? rows[0].ROL : null;
   } catch (error) {
     console.error("Error obteniendo rol:", error);
     return null;
   }
 };
-
 // Middleware para verificar permisos específicos (por rol)
 const verificarPermiso = (rolesPermitidos) => {
   return async (req, res, next) => {
