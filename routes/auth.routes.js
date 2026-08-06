@@ -43,7 +43,7 @@ router.post("/api/register", async (req, res) => {
     }
 
     const userExistsResult = await db.query(
-      `SELECT "ID_USUARIO" FROM "TBL_MS_USUARIO" WHERE UPPER("USUARIO") = UPPER($1)`,
+      `SELECT id_usuario FROM tbl_ms_usuario WHERE UPPER(usuario) = UPPER($1)`,
       [usuario]
     );
     if (userExistsResult.rows.length > 0) {
@@ -51,7 +51,7 @@ router.post("/api/register", async (req, res) => {
     }
 
     const emailExistsResult = await db.query(
-      `SELECT "ID_USUARIO" FROM "TBL_MS_USUARIO" WHERE "CORREO_ELECTRONICO" = $1`,
+      `SELECT id_usuario FROM tbl_ms_usuario WHERE correo_electronico = $1`,
       [correo_electronico]
     );
     if (emailExistsResult.rows.length > 0) {
@@ -62,9 +62,9 @@ router.post("/api/register", async (req, res) => {
     const rol = id_rol ? parseInt(id_rol) : 5;
 
     const insertResult = await db.query(
-      `INSERT INTO "TBL_MS_USUARIO" 
-       ("USUARIO", "NOMBRE_USUARIO", "CONTRASENA", "CORREO_ELECTRONICO", "ESTADO", "ID_ROL")
-       VALUES ($1, $2, $3, $4, 'NUEVO', $5) RETURNING "ID_USUARIO"`,
+      `INSERT INTO tbl_ms_usuario 
+       (usuario, nombre_usuario, contrasena, correo_electronico, estado, id_rol)
+       VALUES ($1, $2, $3, $4, 'NUEVO', $5) RETURNING id_usuario`,
       [usuario, nombre_completo, hashedPassword, correo_electronico, rol]
     );
 
@@ -86,7 +86,7 @@ router.post("/api/register", async (req, res) => {
         descripcion: `Nuevo usuario registrado desde modal: ${usuario}`,
         modulo: "AUTENTICACION",
         idRegistro: insertId,
-        tabla: "TBL_MS_USUARIO",
+        tabla: "tbl_ms_usuario",
         estado: "EXITO",
         req
       });
@@ -125,14 +125,14 @@ router.post("/register", async (req, res) => {
       return res.redirect("/auth/register?error=Las contraseñas no coinciden");
     }
 
-    const userExistsResult = await db.query(`SELECT * FROM "TBL_MS_USUARIO" WHERE UPPER("USUARIO") = UPPER($1)`, [usuario]);
+    const userExistsResult = await db.query(`SELECT * FROM tbl_ms_usuario WHERE UPPER(usuario) = UPPER($1)`, [usuario]);
     if (userExistsResult.rows.length > 0) {
       return res.redirect("/auth/register?error=El usuario ya existe");
     }
 
     const hashedPassword = await bcrypt.hash(contrasena, 10);
     await db.query(
-      `INSERT INTO "TBL_MS_USUARIO" ("USUARIO", "NOMBRE_USUARIO", "CONTRASENA", "CORREO_ELECTRONICO", "ESTADO", "ID_ROL") VALUES ($1, $2, $3, $4, 'NUEVO', 5)`,
+      `INSERT INTO tbl_ms_usuario (usuario, nombre_usuario, contrasena, correo_electronico, estado, id_rol) VALUES ($1, $2, $3, $4, 'NUEVO', 5)`,
       [usuario, nombre_completo, hashedPassword, correo_electronico]
     );
 
@@ -155,7 +155,7 @@ router.post("/login", async (req, res) => {
     }
 
     const result = await db.query(
-      `SELECT * FROM "TBL_MS_USUARIO" WHERE UPPER("USUARIO") = UPPER($1)`,
+      `SELECT * FROM tbl_ms_usuario WHERE UPPER(usuario) = UPPER($1)`,
       [nombre_usuario]
     );
     
@@ -177,12 +177,12 @@ router.post("/login", async (req, res) => {
 
     if (!validPassword) {
       await db.query(
-        `UPDATE "TBL_MS_USUARIO" SET "INTENTOS_FALLIDOS" = COALESCE("INTENTOS_FALLIDOS", 0) + 1 WHERE "ID_USUARIO" = $1`,
+        `UPDATE tbl_ms_usuario SET intentos_fallidos = COALESCE(intentos_fallidos, 0) + 1 WHERE id_usuario = $1`,
         [idUsuario]
       );
       
       const intentosResult = await db.query(
-        `SELECT "INTENTOS_FALLIDOS" FROM "TBL_MS_USUARIO" WHERE "ID_USUARIO" = $1`,
+        `SELECT intentos_fallidos FROM tbl_ms_usuario WHERE id_usuario = $1`,
         [idUsuario]
       );
       
@@ -190,7 +190,7 @@ router.post("/login", async (req, res) => {
       
       if (intentosFallidos >= 3) {
         await db.query(
-          `UPDATE "TBL_MS_USUARIO" SET "ESTADO" = 'BLOQUEADO' WHERE "ID_USUARIO" = $1`,
+          `UPDATE tbl_ms_usuario SET estado = 'BLOQUEADO' WHERE id_usuario = $1`,
           [idUsuario]
         );
         return res.redirect("/auth/login?error=Usuario bloqueado por exceso de intentos");
@@ -200,7 +200,7 @@ router.post("/login", async (req, res) => {
     }
 
     await db.query(
-      `UPDATE "TBL_MS_USUARIO" SET "INTENTOS_FALLIDOS" = 0, "FECHA_ULTIMA_CONEXION" = NOW() WHERE "ID_USUARIO" = $1`,
+      `UPDATE tbl_ms_usuario SET intentos_fallidos = 0, fecha_ultima_conexion = NOW() WHERE id_usuario = $1`,
       [idUsuario]
     );
 
@@ -230,7 +230,7 @@ router.get("/forgot-password", (req, res) => {
 router.post("/forgot-password", async (req, res) => {
   try {
     const { correo } = req.body;
-    const result = await db.query(`SELECT * FROM "TBL_MS_USUARIO" WHERE "CORREO_ELECTRONICO"=$1`, [correo]);
+    const result = await db.query(`SELECT * FROM tbl_ms_usuario WHERE correo_electronico=$1`, [correo]);
 
     if (result.rows.length === 0) {
       return res.render("forgot-password", { error: "El correo no existe", success: null });
@@ -240,7 +240,7 @@ router.post("/forgot-password", async (req, res) => {
     const usuario = result.rows[0].usuario || result.rows[0].USUARIO;
 
     await db.query(
-      `UPDATE "TBL_MS_USUARIO" SET "CODIGO_RECUPERACION"=$1, "EXPIRA_CODIGO"=NOW() + INTERVAL '10 minutes' WHERE UPPER("USUARIO")=UPPER($2)`,
+      `UPDATE tbl_ms_usuario SET codigo_recuperacion=$1, expira_codigo=NOW() + INTERVAL '10 minutes' WHERE UPPER(usuario)=UPPER($2)`,
       [codigo, usuario]
     );
 
