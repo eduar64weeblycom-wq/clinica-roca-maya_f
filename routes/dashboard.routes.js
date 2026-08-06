@@ -16,12 +16,11 @@ router.get("/", async (req, res) => {
     const usuario = req.usuarioActual;
     const esPrimerIngreso = req.esPrimerIngreso || false;
 
-    // Consulta corregida sin la columna "ESTADO" en TBL_MS_USUARIO
     const resultadoUser = await db.query(`
-      SELECT u."ID_USUARIO", u."USUARIO", u."NOMBRE_USUARIO", u."CORREO_ELECTRONICO", r."ROL", r."ID_ROL"
-      FROM "TBL_MS_USUARIO" u
-      INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
-      WHERE u."USUARIO" = $1
+      SELECT u.id_usuario, u.usuario, u.nombre_usuario, u.correo_electronico, r.rol, r.id_rol
+      FROM tbl_ms_usuario u
+      INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol
+      WHERE u.usuario = $1
     `, [usuario]);
 
     const userData = resultadoUser.rows;
@@ -30,27 +29,27 @@ router.get("/", async (req, res) => {
       return res.redirect("/auth/login");
     }
 
-    const rol = userData[0].ROL;
-    const nombreUsuario = userData[0].NOMBRE_USUARIO;
-    const email = userData[0].CORREO_ELECTRONICO || null;
+    const rol = userData[0].rol;
+    const nombreUsuario = userData[0].nombre_usuario;
+    const email = userData[0].correo_electronico || null;
     const esNuevo = esPrimerIngreso;
 
     let stats = { pacientes: 0, citasHoy: 0, consultasDiarias: 0, medicamentos: 0 };
     if (!esNuevo) {
       if (rol === 'ADMINISTRADOR' || rol === 'ENFERMERA') {
-        const resPacientes = await db.query(`SELECT COUNT(*) as total FROM "TBL_PACIENTE" WHERE "ESTADO" = 'ACTIVO'`);
+        const resPacientes = await db.query(`SELECT COUNT(*) as total FROM tbl_paciente WHERE estado = 'ACTIVO'`);
         stats.pacientes = resPacientes.rows[0]?.total || 0;
       }
       if (rol === 'ADMINISTRADOR' || rol === 'RECEPCIONISTA') {
-        const resCitas = await db.query(`SELECT COUNT(*) as total FROM "TBL_CITAS" WHERE DATE("FECHA_CITA") = CURRENT_DATE`);
+        const resCitas = await db.query(`SELECT COUNT(*) as total FROM tbl_citas WHERE DATE(fecha_cita) = CURRENT_DATE`);
         stats.citasHoy = resCitas.rows[0]?.total || 0;
       }
       if (rol === 'ADMINISTRADOR' || rol === 'DOCTOR') {
-        const resConsultas = await db.query(`SELECT COUNT(*) as total FROM "TBL_CONSULTA_MEDICA" WHERE DATE("FECHA_CONSULTA") = CURRENT_DATE`);
+        const resConsultas = await db.query(`SELECT COUNT(*) as total FROM tbl_consulta_medica WHERE DATE(fecha_consulta) = CURRENT_DATE`);
         stats.consultasDiarias = resConsultas.rows[0]?.total || 0;
       }
       if (rol === 'ADMINISTRADOR') {
-        const resMed = await db.query(`SELECT COUNT(*) as total FROM "TBL_INVENTARIO_MEDICAMENTOS" WHERE "ESTADO" = 'ACTIVO'`);
+        const resMed = await db.query(`SELECT COUNT(*) as total FROM tbl_inventario_medicamentos WHERE estado = 'ACTIVO'`);
         stats.medicamentos = resMed.rows[0]?.total || 0;
       }
     }
@@ -75,17 +74,17 @@ router.get('/permisos', async (req, res) => {
     const usuario = req.usuarioActual;
     if (!usuario) return res.status(401).json({ error: 'No autenticado' });
 
-    const resUser = await db.query(`SELECT "ID_ROL" FROM "TBL_MS_USUARIO" WHERE "USUARIO" = $1`, [usuario]);
+    const resUser = await db.query(`SELECT id_rol FROM tbl_ms_usuario WHERE usuario = $1`, [usuario]);
     const userData = resUser.rows;
     if (userData.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-    const idRol = userData[0].ID_ROL;
+    const idRol = userData[0].id_rol;
     const resPermisos = await db.query(`
-      SELECT p."ID_OBJETO" as id, p."PERMISO_CONSULTA" as consulta, o."OBJETO" as nombre, o."TIPO_OBJETO" as tipo
-      FROM "TBL_PERMISOS" p
-      INNER JOIN "TBL_OBJETOS" o ON p."ID_OBJETO" = o."ID_OBJETO"
-      WHERE p."ID_ROL" = $1
-      ORDER BY o."ID_OBJETO"
+      SELECT p.id_objeto as id, p.permiso_consulta as consulta, o.objeto as nombre, o.tipo_objeto as tipo
+      FROM tbl_permisos p
+      INNER JOIN tbl_objetos o ON p.id_objeto = o.id_objeto
+      WHERE p.id_rol = $1
+      ORDER BY o.id_objeto
     `, [idRol]);
 
     res.json({ success: true, rol: idRol, permisos: resPermisos.rows });
@@ -114,11 +113,10 @@ router.post('/cambiar-password', async (req, res) => {
       });
     }
 
-    // Consulta corregida sin la columna "ESTADO"
     const resUser = await db.query(`
-      SELECT "ID_USUARIO", "CONTRASENA" 
-      FROM "TBL_MS_USUARIO" 
-      WHERE "USUARIO" = $1
+      SELECT id_usuario, contrasena 
+      FROM tbl_ms_usuario 
+      WHERE usuario = $1
     `, [usuario]);
 
     const userData = resUser.rows;
@@ -127,8 +125,8 @@ router.post('/cambiar-password', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
     }
 
-    const userId = userData[0].ID_USUARIO;
-    const hashedPassword = userData[0].CONTRASENA;
+    const userId = userData[0].id_usuario;
+    const hashedPassword = userData[0].contrasena;
 
     const isMatch = await bcrypt.compare(currentPassword, hashedPassword);
     if (!isMatch) {
@@ -145,27 +143,26 @@ router.post('/cambiar-password', async (req, res) => {
 
     const newHashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Actualización de contraseña sin modificar la columna ESTADO inexistente
     await db.query(`
-      UPDATE "TBL_MS_USUARIO" 
-      SET "CONTRASENA" = $1, 
-          "FECHA_MODIFICACION" = NOW(),
-          "USUARIO_MODIFICACION" = $2
-      WHERE "ID_USUARIO" = $3
+      UPDATE tbl_ms_usuario 
+      SET contrasena = $1, 
+          fecha_modificacion = NOW(),
+          usuario_modificacion = $2
+      WHERE id_usuario = $3
     `, [newHashedPassword, usuario, userId]);
 
     // Registro en bitácora
     await db.query(`
-      INSERT INTO "TBL_MS_BITACORA" (
-        "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", 
-        "TABLA", "IP_CLIENTE", "USER_AGENT", "ESTADO", "DETALLE_ERROR", "ORIGEN", "FECHA"
+      INSERT INTO tbl_ms_bitacora (
+        id_usuario, accion, descripcion, modulo, 
+        tabla_afectada, ip_cliente, user_agent, estado_operacion, detalle_error, usuario_creacion, fecha_hora
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
     `, [
       userId,
       'CAMBIO_CONTRASENA',
       `Usuario ${usuario} cambió su contraseña`,
       'SEGURIDAD',
-      'TBL_MS_USUARIO',
+      'tbl_ms_usuario',
       req.ip || null,
       req.headers['user-agent'] || null,
       'EXITO',
@@ -193,29 +190,29 @@ router.get('/stats', async (req, res) => {
   try {
     const usuario = req.usuarioActual;
     const resUser = await db.query(`
-      SELECT r."ROL"
-      FROM "TBL_MS_USUARIO" u
-      INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
-      WHERE u."USUARIO" = $1
+      SELECT r.rol
+      FROM tbl_ms_usuario u
+      INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol
+      WHERE u.usuario = $1
     `, [usuario]);
     const userData = resUser.rows;
-    const rol = userData[0]?.ROL || '';
+    const rol = userData[0]?.rol || '';
     let stats = { pacientesActivos: 0, citasHoy: 0, consultasHoy: 0, medicamentosActivos: 0 };
 
     if (rol === 'ADMINISTRADOR' || rol === 'ENFERMERA') {
-      const p = await db.query(`SELECT COUNT(*) as total FROM "TBL_PACIENTE" WHERE "ESTADO" = 'ACTIVO'`);
+      const p = await db.query(`SELECT COUNT(*) as total FROM tbl_paciente WHERE estado = 'ACTIVO'`);
       stats.pacientesActivos = p.rows[0]?.total || 0;
     }
     if (rol === 'ADMINISTRADOR' || rol === 'RECEPCIONISTA') {
-      const c = await db.query(`SELECT COUNT(*) as total FROM "TBL_CITAS" WHERE DATE("FECHA_CITA") = CURRENT_DATE`);
+      const c = await db.query(`SELECT COUNT(*) as total FROM tbl_citas WHERE DATE(fecha_cita) = CURRENT_DATE`);
       stats.citasHoy = c.rows[0]?.total || 0;
     }
     if (rol === 'ADMINISTRADOR' || rol === 'DOCTOR') {
-      const co = await db.query(`SELECT COUNT(*) as total FROM "TBL_CONSULTA_MEDICA" WHERE DATE("FECHA_CONSULTA") = CURRENT_DATE`);
+      const co = await db.query(`SELECT COUNT(*) as total FROM tbl_consulta_medica WHERE DATE(fecha_consulta) = CURRENT_DATE`);
       stats.consultasHoy = co.rows[0]?.total || 0;
     }
     if (rol === 'ADMINISTRADOR') {
-      const m = await db.query(`SELECT COUNT(*) as total FROM "TBL_INVENTARIO_MEDICAMENTOS" WHERE "ESTADO" = 'ACTIVO'`);
+      const m = await db.query(`SELECT COUNT(*) as total FROM tbl_inventario_medicamentos WHERE estado = 'ACTIVO'`);
       stats.medicamentosActivos = m.rows[0]?.total || 0;
     }
     res.json(stats);
