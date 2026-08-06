@@ -488,7 +488,7 @@ router.get("/consultas", async (req, res) => {
         console.log(" SQL Query:", sql);
         console.log(" Parámetros:", params);
 
-        const [citas] = await pool.query(sql, params);
+        const { rows: citas } = await pool.query(sql, params);
 
         console.log(` Citas encontradas: ${citas.length}`);
 
@@ -780,7 +780,7 @@ router.get("/citas", async (req, res) => {
     try {
         console.log(" Generando Excel de citas...");
 
-        const [citas] = await pool.query(`
+        const { rows: citas } = await pool.query(`
             SELECT 
                 c.ID_CITA,
                 CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,

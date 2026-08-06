@@ -1816,7 +1816,7 @@ router.post(
         });
       }
 
-      const [citas] = await pool.query(
+      const { rows: citas } = await pool.query(
         `
           SELECT
             c.ID_CITA,
@@ -2062,7 +2062,7 @@ router.delete("/eliminar/:id", async (req, res) => {
       });
     }
 
-    const [citas] = await pool.query(
+    const { rows: citas } = await pool.query(
       `
         SELECT ID_CITA, ESTADO
         FROM TBL_CITAS

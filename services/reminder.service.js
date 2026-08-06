@@ -21,7 +21,7 @@ function iniciarCronRecordatorios() {
        WHERE DATE(c.FECHA_CITA) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)
       `;
       
-      const [citas] = await pool.query(query);
+      const { rows: citas } = await pool.queryy(query);
 
       for (const cita of citas) {
         if (!cita.CORREO_ELECTRONICO) continue;
