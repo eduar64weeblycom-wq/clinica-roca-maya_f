@@ -97,7 +97,6 @@ app.use(async (req, res, next) => {
           u."ID_USUARIO",
           u."USUARIO",
           u."NOMBRE_USUARIO",
-          u."ESTADO",
           u."CORREO_ELECTRONICO",
           r."ROL",
           r."ID_ROL"
