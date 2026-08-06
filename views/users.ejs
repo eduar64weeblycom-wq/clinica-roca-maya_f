@@ -782,7 +782,7 @@ body {
   </div>
 
   <!-- ============================================================
-       MODAL DE EDICIÓN DE USUARIO
+       MODAL DE EDICIÓN DE USUARIO (CON TELÉFONO PROFESIONAL)
        ============================================================ -->
   <div id="modalUsuario" class="modal" aria-hidden="true">
     <div class="modal-content">
@@ -824,6 +824,19 @@ body {
           </select>
           <small class="form-text">
             <i class="fas fa-info-circle"></i> Mantenga presionada la tecla <kbd>Ctrl</kbd> (Windows) o <kbd>Cmd</kbd> (Mac) para seleccionar múltiples especialidades.
+          </small>
+        </div>
+
+        <!-- ============================================================
+             NUEVO: CAMPO TELÉFONO PROFESIONAL (SOLO DOCTOR)
+             ============================================================ -->
+        <div class="form-group" id="telefonoProfesionalGroup" style="display: none;">
+          <label for="inputTelefonoProfesional"><i class="fas fa-phone"></i> Teléfono Profesional</label>
+          <input id="inputTelefonoProfesional" type="text" class="form-input" 
+                 placeholder="Solo números, teléfono de atención al paciente" 
+                 maxlength="20">
+          <small class="form-text text-muted">
+            <i class="fas fa-info-circle"></i> Solo números directo y especial para atención del paciente, NO personal.
           </small>
         </div>
 
