@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const logoBtn = document.getElementById('logoBtn');
   const btnImprimir = document.getElementById('btnImprimir');
 
-  // Elementos de Filtros
   const usuarioFilter = document.getElementById('usuarioFilter');
   const nombreFilter = document.getElementById('nombreFilter');
   const estadoFilter = document.getElementById('estadoFilter');
@@ -48,6 +47,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (modalUsuario) modalUsuario.style.display = 'none';
     if (formUsuario) formUsuario.reset();
     if (SkinnerGroup) SkinnerGroup.style.display = 'none';
+    const telefonoGroup = document.getElementById('telefonoProfesionalGroup');
+    if (telefonoGroup) telefonoGroup.style.display = 'none';
   }
 
   function cerrarModalEliminar() {
@@ -70,73 +71,64 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // ============================================================
-// RECARGAR ROLES EN AMBOS SELECTORES
-// ============================================================
-async function recargarRolesGlobal() {
-  try {
-    console.log('🔄 Recargando roles globalmente...');
-    
-    const resp = await fetch('/roles/api/roles');
-    const data = await resp.json();
-    
-    if (!data.ok) {
-      console.error('❌ Error al obtener roles:', data.msg);
+  // RECARGAR ROLES GLOBAL
+  // ============================================================
+  async function recargarRolesGlobal() {
+    try {
+      console.log('🔄 Recargando roles globalmente...');
+      const resp = await fetch('/roles/api/roles');
+      const data = await resp.json();
+      if (!data.ok) {
+        console.error('❌ Error al obtener roles:', data.msg);
+        return false;
+      }
+      
+      if (selectRol) {
+        const valorActual = selectRol.value;
+        selectRol.innerHTML = '';
+        data.roles.forEach(rol => {
+          const option = document.createElement('option');
+          option.value = rol.ID_ROL;
+          option.textContent = rol.ROL;
+          selectRol.appendChild(option);
+        });
+        if (valorActual) {
+          for (let i = 0; i < selectRol.options.length; i++) {
+            if (selectRol.options[i].value == valorActual) {
+              selectRol.selectedIndex = i;
+              break;
+            }
+          }
+        }
+      }
+      
+      const regRol = document.getElementById('regRol');
+      if (regRol) {
+        const valorActual = regRol.value;
+        regRol.innerHTML = '';
+        data.roles.forEach(rol => {
+          const option = document.createElement('option');
+          option.value = rol.ID_ROL;
+          option.textContent = rol.ROL;
+          regRol.appendChild(option);
+        });
+        if (valorActual) {
+          for (let i = 0; i < regRol.options.length; i++) {
+            if (regRol.options[i].value == valorActual) {
+              regRol.selectedIndex = i;
+              break;
+            }
+          }
+        }
+      }
+      
+      console.log('✅ Roles recargados en ambos selects');
+      return true;
+    } catch (error) {
+      console.error('❌ Error recargando roles:', error);
       return false;
     }
-    
-    // 1. Actualizar select del modal de edición (#selectRol)
-    if (selectRol) {
-      const valorActual = selectRol.value;
-      selectRol.innerHTML = '';
-      data.roles.forEach(rol => {
-        const option = document.createElement('option');
-        option.value = rol.ID_ROL;
-        option.textContent = rol.ROL;
-        selectRol.appendChild(option);
-      });
-      
-      // Restaurar selección
-      if (valorActual) {
-        for (let i = 0; i < selectRol.options.length; i++) {
-          if (selectRol.options[i].value == valorActual) {
-            selectRol.selectedIndex = i;
-            break;
-          }
-        }
-      }
-    }
-    
-    // 2. Actualizar select del modal de registro (#regRol)
-    const regRol = document.getElementById('regRol');
-    if (regRol) {
-      const valorActual = regRol.value;
-      regRol.innerHTML = '';
-      data.roles.forEach(rol => {
-        const option = document.createElement('option');
-        option.value = rol.ID_ROL;
-        option.textContent = rol.ROL;
-        regRol.appendChild(option);
-      });
-      
-      // Restaurar selección
-      if (valorActual) {
-        for (let i = 0; i < regRol.options.length; i++) {
-          if (regRol.options[i].value == valorActual) {
-            regRol.selectedIndex = i;
-            break;
-          }
-        }
-      }
-    }
-    
-    console.log('✅ Roles recargados en ambos selects');
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Error recargando roles:', error);
-    return false;
   }
-}
 
   // ============================================================
   // CARGAR ESPECIALIDADES
@@ -177,6 +169,21 @@ async function recargarRolesGlobal() {
   }
 
   // ============================================================
+  // MOSTRAR/OCULTAR TELÉFONO PROFESIONAL
+  // ============================================================
+  function toggleTelefonoProfesional(rolId) {
+    const group = document.getElementById('telefonoProfesionalGroup');
+    if (!group) return;
+    if (parseInt(rolId) === 2) {
+      group.style.display = 'block';
+    } else {
+      group.style.display = 'none';
+      const input = document.getElementById('inputTelefonoProfesional');
+      if (input) input.value = '';
+    }
+  }
+
+  // ============================================================
   // ABRIR MODAL DE EDICIÓN
   // ============================================================
   async function abrirModalEditar(id) {
@@ -194,8 +201,14 @@ async function recargarRolesGlobal() {
       selectRol.value = usuario.ID_ROL;
       selectEstado.value = usuario.ESTADO;
 
+      const inputTelefono = document.getElementById('inputTelefonoProfesional');
+      if (inputTelefono) {
+        inputTelefono.value = usuario.TELEFONO_PROFESIONAL || '';
+      }
+
       await cargarEspecialidades(especialidadesUsuario);
       toggleEspecialidades(usuario.ID_ROL);
+      toggleTelefonoProfesional(usuario.ID_ROL);
 
       document.getElementById('modalTitulo').textContent = 'Editar Usuario';
       modalUsuario.style.display = 'block';
@@ -292,7 +305,7 @@ async function recargarRolesGlobal() {
   });
 
   // ============================================================
-  // CONTROL DE FILTROS DE BÚSQUEDA
+  // CONTROL DE FILTROS
   // ============================================================
   function ejecutarFiltros() {
     const queryUsuario = usuarioFilter?.value.toLowerCase().trim() || '';
@@ -339,7 +352,9 @@ async function recargarRolesGlobal() {
   // EVENTOS ADICIONALES
   // ============================================================
   selectRol?.addEventListener('change', function() {
-    toggleEspecialidades(this.value);
+    const rolId = this.value;
+    toggleEspecialidades(rolId);
+    toggleTelefonoProfesional(rolId);
   });
 
   logoBtn?.addEventListener('click', function() {
@@ -361,6 +376,7 @@ async function recargarRolesGlobal() {
     const nombre_usuario = inputNombre.value.trim();
     const id_rol = selectRol.value;
     const estado = selectEstado.value;
+    const telefonoProfesional = document.getElementById('inputTelefonoProfesional')?.value.trim() || '';
 
     let especialidades = [];
     if (parseInt(id_rol) === 2 && selectEspecialidades) {
@@ -375,7 +391,8 @@ async function recargarRolesGlobal() {
       estado,
       activo_2fa: 0,
       usuarioAccion: usuarioLogueado,
-      especialidades
+      especialidades,
+      telefonoProfesional
     };
 
     try {
@@ -423,7 +440,6 @@ async function recargarRolesGlobal() {
     if (mostradosEl) mostradosEl.textContent = mostrados;
   }
 
-  // Inicialización
   actualizarContadores();
   console.log('🚀 users.js cargado e inicializado correctamente con filtros.');
 });
