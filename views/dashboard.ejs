@@ -9,10 +9,11 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="/css/dashboard.css">
+  
   <style>
     /* ============================================================
-       ESTILOS BASE
-       ============================================================ */
+        ESTILOS BASE
+        ============================================================ */
     #userDropdown {
       position: fixed !important;
       z-index: 999999 !important;
@@ -42,8 +43,8 @@
     }
 
     /* ============================================================
-       MODAL DE BLOQUEO CON FORMULARIO INTEGRADO
-       ============================================================ */
+        MODAL DE BLOQUEO CON FORMULARIO INTEGRADO
+        ============================================================ */
     .modal-bloqueo {
       display: none;
       position: fixed;
@@ -144,14 +145,6 @@
       outline: none;
       box-shadow: 0 0 0 3px rgba(33,158,188,0.2);
     }
-    .modal-bloqueo .modal-content-bloqueo .form-group .input-group input.is-invalid {
-      border-color: #dc3545;
-      box-shadow: 0 0 0 3px rgba(220,53,69,0.2);
-    }
-    .modal-bloqueo .modal-content-bloqueo .form-group .input-group input.is-valid {
-      border-color: #28a745;
-      box-shadow: 0 0 0 3px rgba(40,167,69,0.2);
-    }
     .modal-bloqueo .modal-content-bloqueo .form-group .toggle-password-modal {
       position: absolute;
       right: 10px;
@@ -215,8 +208,8 @@
     }
 
     /* ============================================================
-       BLOQUEO TOTAL DEL CONTENIDO PRINCIPAL
-       ============================================================ */
+        BLOQUEO TOTAL DEL CONTENIDO PRINCIPAL
+        ============================================================ */
     body.modal-bloqueo-activo {
       overflow: hidden !important;
     }
@@ -264,8 +257,8 @@
     }
 
     /* ============================================================
-       RESPONSIVE
-       ============================================================ */
+        RESPONSIVE
+        ============================================================ */
     @media (max-width: 576px) {
       .modal-bloqueo .modal-content-bloqueo {
         padding: 25px 20px;
@@ -349,7 +342,7 @@
   </div>
 
   <!-- ============================================================
-       EL RESTO DEL DASHBOARD (se mantiene igual, pero todo bloqueado)
+       EL RESTO DEL DASHBOARD
        ============================================================ -->
   <!-- Modal Sidebar -->
   <div class="sidebar-modal" id="sidebarModal">
@@ -463,7 +456,7 @@
       <div class="welcome-area d-flex align-items-center gap-3">
        
         <!-- ============================================================ -->
-        <!-- MENÚ DESPLEGABLE DE USUARIO (se mantiene pero bloqueado) -->
+        <!-- MENÚ DESPLEGABLE DE USUARIO -->
         <!-- ============================================================ -->
         <div class="dropdown d-inline-block" id="userDropdownContainer" style="position: relative; z-index: 99999; overflow: visible;">
           <button class="btn btn-link text-decoration-none p-0" id="userMenuButton" type="button" style="color: #333; position: relative; z-index: 99999;">
@@ -480,7 +473,7 @@
             </div>
           </button>
           
-          <!-- Dropdown (se mantiene pero no es necesario para el primer ingreso) -->
+          <!-- Dropdown -->
           <div class="dropdown-menu dropdown-menu-end p-0" id="userDropdown">
             <div class="p-3" style="background: linear-gradient(135deg, #1a5276, #2e86c1); border-radius: 12px 12px 0 0;">
               <div class="d-flex align-items-center gap-3">
@@ -517,6 +510,16 @@
               <span>Cambiar Contraseña</span>
               <i class="fas fa-chevron-right ms-auto" style="font-size: 0.6rem; color: #6c757d;"></i>
             </button>
+
+            <!-- ========== TELÉFONO PROFESIONAL ========== -->
+            <button class="dropdown-item d-flex align-items-center gap-3 px-3 py-2 config-option" 
+                    data-option="telefono" 
+                    style="font-size: 0.85rem; border: none; width: 100%; text-align: left; background: transparent; cursor: pointer;">
+              <i class="fas fa-phone" style="width: 18px; color: #1a5276; font-size: 1rem;"></i>
+              <span>Teléfono Profesional</span>
+              <i class="fas fa-chevron-right ms-auto" style="font-size: 0.6rem; color: #6c757d;"></i>
+            </button>
+
             <div class="dropdown-item d-flex align-items-center gap-3 px-3 py-2" style="font-size: 0.85rem; opacity: 0.5; cursor: default; border: none; width: 100%; text-align: left; background: transparent;">
               <i class="fas fa-bell" style="width: 18px; color: #6c757d; font-size: 1rem;"></i>
               <span>Notificaciones</span>
@@ -527,7 +530,13 @@
               <i class="fas fa-sign-out-alt" style="width: 18px; font-size: 1rem;"></i>
               <span>Cerrar sesión</span>
             </a>
+            
+            <!-- ============================================================ -->
+            <!-- CONTENIDO PLEGABLE (Perfil, Contraseña, Teléfono) -->
+            <!-- ============================================================ -->
             <div id="dropdownContentContainer" class="border-top p-3" style="background: #fafafa; border-radius: 0 0 12px 12px; min-height: 150px; border-top: 1px solid #e9ecef;">
+              
+              <!-- PERFIL -->
               <div id="dropdownPerfil" style="display: block;">
                 <div class="d-flex flex-column gap-2">
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -542,15 +551,19 @@
                     <span class="text-muted small">Rol</span>
                     <span class="fw-semibold small"><%= rol %></span>
                   </div>
-                  <div class="d-flex justify-content-between align-items-center py-1">
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <span class="text-muted small">Correo</span>
                     <span class="fw-semibold small"><%= email || 'No registrado' %></span>
                   </div>
+                  <div class="d-flex justify-content-between align-items-center py-1">
+                    <span class="text-muted small">Teléfono Profesional</span>
+                    <span class="fw-semibold small telefono-perfil"><%= telefonoProfesional || 'No registrado' %></span>
+                  </div>
                 </div>
               </div>
+
+              <!-- CAMBIAR CONTRASEÑA -->
               <div id="dropdownPassword" style="display: none;">
-                <!-- El formulario dentro del dropdown ya no se usa para primer ingreso,
-                     pero se mantiene por si el usuario accede desde el perfil normal -->
                 <form id="formCambioPassword" class="d-flex flex-column gap-2">
                   <div class="position-relative">
                     <label class="small text-muted mb-1">Contraseña Actual</label>
@@ -587,8 +600,34 @@
                   </button>
                 </form>
               </div>
-            </div>
-          </div>
+
+              <!-- TELÉFONO PROFESIONAL -->
+              <div id="dropdownTelefono" style="display: none;">
+                <form id="formCambioTelefono" class="d-flex flex-column gap-2">
+                  <div class="position-relative">
+                    <label class="small text-muted mb-1">Teléfono Profesional</label>
+                    <div class="input-group" style="height: 35px;">
+                      <input type="text" class="form-control form-control-sm" id="telefonoProfesionalInput" 
+                             placeholder="Ej: 98765432" style="font-size: 0.85rem; border-right: none;" maxlength="20">
+                      <button class="btn btn-outline-secondary btn-sm" type="button" id="btnLimpiarTelefono" style="border-left: none; background: #fff; z-index: 2;">
+                        <i class="fas fa-times" style="font-size: 0.8rem;"></i>
+                      </button>
+                    </div>
+                    <small class="text-muted" style="font-size: 0.65rem;">Solo números (opcional). Teléfono directo para atención de pacientes.</small>
+                  </div>
+                  <div id="telefonoChangeError" class="alert alert-danger d-none" style="font-size: 0.75rem; padding: 6px 10px; margin: 0;"></div>
+                  <div id="telefonoChangeSuccess" class="alert alert-success d-none" style="font-size: 0.75rem; padding: 6px 10px; margin: 0;"></div>
+                  <button type="submit" class="btn btn-primary btn-sm w-100 mt-1" id="btnGuardarTelefono" style="font-size: 0.85rem; padding: 6px 0; border-radius: 6px;">
+                    <i class="fas fa-save me-1"></i>Guardar Teléfono
+                  </button>
+                </form>
+                <div class="mt-2 text-center">
+                  <small class="text-muted" id="telefonoActualMostrar" style="font-size: 0.75rem;"></small>
+                </div>
+              </div>
+
+            </div> <!-- /#dropdownContentContainer -->
+          </div> <!-- /#userDropdown -->
         </div>
         
         <img src="/roca-maya-oct.jpg" alt="Logo Roca Maya" class="logo-small" />
@@ -659,469 +698,24 @@
     </div>
 
     <!-- Reseña Histórica -->
-    <div class="container">
-      <div class="history-section">
-        <div class="history-header">
-          <div class="history-icon">
+    <div class="container mb-5">
+      <div class="history-section p-4 shadow-sm bg-white rounded-4">
+        <div class="history-header d-flex align-items-center gap-3 mb-3">
+          <div class="history-icon fs-3 text-primary">
             <i class="fas fa-history"></i>
           </div>
-          <h3 class="mb-0">Nuestra Historia</h3>
+          <h3 class="mb-0 fw-bold">Nuestra Historia</h3>
         </div>
-        <div class="history-content">
-          <p>En el año 2014, el Doctor Francisco llegó a Santa Rita, Copán, con un sueño claro: brindar atención médica de calidad en una comunidad trabajadora y honorable. Durante tres años, se desempeñó en el centro de salud local, donde fue testigo de las necesidades urgentes de los habitantes, especialmente cuando las instalaciones públicas cerraban y dejaban a muchos sin opciones.</p>
-          <p>Fue así como nació su visión: una clínica accesible, eficiente y comprometida con la salud de su gente. Con determinación y esfuerzo, invirtió sus recursos y conocimientos para materializar ese proyecto. En 2018, abrió las puertas de Roca Maya, comenzando con una sucursal en Villanueva, Cortés, especializada en emergencias 24 horas.</p>
-          <p>Sin embargo, su corazón siempre estuvo en Santa Rita, por lo que pronto trasladó su sede principal al corazón del pueblo, cerca del parque central, donde la clínica se convirtió en un referente de confianza.</p>
-          <p>Hoy, Clínicas Médicas Roca Maya continúa creciendo y expandiendo sus servicios, manteniendo siempre el compromiso con la comunidad que le vio nacer y la misión de ofrecer atención médica de excelencia para todos.</p>
+        <div class="history-content text-muted">
+          <p>En el año 2014, el Doctor Francisco llegó a Santa Rita, Copán, con un sueño claro: brindar atención médica de calidad en una comunidad trabajadora y honorable. Durante tres años, se desempeñó en el centro de salud local, donde fue testigo cercano de las necesidades y la resiliencia de la población.</p>
+          <p>Motivado por ese compromiso humano y el deseo de ofrecer un servicio más cercano, accesible y especializado, fundó formalmente las <strong>Clínicas Médicas Roca Maya</strong>. Lo que comenzó como un pequeño consultorio enfocado en la atención primaria ha crecido con los años gracias a la confianza de nuestros pacientes y la integración de un equipo médico profesional, moderno y comprometido con la excelencia.</p>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Scripts de Bootstrap y lógica personalizada -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-
-      // ============================================================
-      //  VARIABLES
-      // ============================================================
-      const esPrimerIngreso = <%= esPrimerIngreso %>;
-
-      // ============================================================
-      //  ELEMENTOS DEL MODAL Y FORMULARIO
-      // ============================================================
-      const modalBloqueo = document.getElementById('modalBloqueoPrimerIngreso');
-      const formCambioPasswordModal = document.getElementById('formCambioPasswordModal');
-      const currentPasswordModal = document.getElementById('currentPasswordModal');
-      const newPasswordModal = document.getElementById('newPasswordModal');
-      const confirmNewPasswordModal = document.getElementById('confirmNewPasswordModal');
-      const passwordChangeErrorModal = document.getElementById('passwordChangeErrorModal');
-      const passwordChangeSuccessModal = document.getElementById('passwordChangeSuccessModal');
-      const btnCambiarPasswordModal = document.getElementById('btnCambiarPasswordModal');
-
-      // ============================================================
-      //  MOSTRAR MODAL SI ES PRIMER INGRESO
-      // ============================================================
-      if (esPrimerIngreso) {
-        console.log('🔒 Primer ingreso - Mostrando modal con formulario');
-        if (modalBloqueo) {
-          modalBloqueo.classList.add('active');
-        }
-        document.body.classList.add('modal-bloqueo-activo');
-        document.body.style.overflow = 'hidden';
-
-        const menuToggle = document.getElementById('menuToggle');
-        if (menuToggle) {
-          menuToggle.classList.add('disabled');
-          menuToggle.setAttribute('disabled', 'disabled');
-        }
-      }
-
-      // ============================================================
-      //  TOGGLE MOSTRAR/OCULTAR CONTRASEÑA EN EL MODAL
-      // ============================================================
-      document.querySelectorAll('.toggle-password-modal').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-          e.preventDefault();
-          const targetId = this.getAttribute('data-target');
-          const input = document.getElementById(targetId);
-          const icon = this.querySelector('i');
-          if (input) {
-            if (input.type === 'password') {
-              input.type = 'text';
-              icon.classList.remove('fa-eye');
-              icon.classList.add('fa-eye-slash');
-              icon.style.color = '#1a5276';
-            } else {
-              input.type = 'password';
-              icon.classList.remove('fa-eye-slash');
-              icon.classList.add('fa-eye');
-              icon.style.color = '#6c757d';
-            }
-          }
-        });
-      });
-
-      // ============================================================
-      //  VALIDACIÓN EN TIEMPO REAL (NUEVA CONTRASEÑA)
-      // ============================================================
-      if (newPasswordModal) {
-        newPasswordModal.addEventListener('input', function() {
-          const pass = this.value;
-          if (pass.length > 0 && (pass.length < 9 || pass.length > 15)) {
-            this.classList.add('is-invalid');
-            this.classList.remove('is-valid');
-          } else if (pass.length >= 9 && pass.length <= 15) {
-            this.classList.remove('is-invalid');
-            this.classList.add('is-valid');
-          } else {
-            this.classList.remove('is-invalid', 'is-valid');
-          }
-        });
-      }
-
-      // ============================================================
-      //  ENVÍO DEL FORMULARIO DESDE EL MODAL (CON VALIDACIÓN COMPLETA)
-      // ============================================================
-      if (formCambioPasswordModal) {
-        formCambioPasswordModal.addEventListener('submit', async function(e) {
-          e.preventDefault();
-
-          // Ocultar mensajes anteriores
-          passwordChangeErrorModal.classList.add('d-none');
-          passwordChangeSuccessModal.classList.add('d-none');
-
-          // Obtener valores
-          const current = currentPasswordModal.value.trim();
-          const newPass = newPasswordModal.value.trim();
-          const confirm = confirmNewPasswordModal.value.trim();
-
-          // Validaciones frontend
-          if (!current) {
-            passwordChangeErrorModal.textContent = '⚠️ La contraseña actual es obligatoria.';
-            passwordChangeErrorModal.classList.remove('d-none');
-            return;
-          }
-
-          if (!newPass || !confirm) {
-            passwordChangeErrorModal.textContent = '⚠️ La nueva contraseña y su confirmación son obligatorias.';
-            passwordChangeErrorModal.classList.remove('d-none');
-            return;
-          }
-
-          if (newPass.length < 9 || newPass.length > 15) {
-            passwordChangeErrorModal.textContent = '⚠️ La nueva contraseña debe tener entre 9 y 15 caracteres.';
-            passwordChangeErrorModal.classList.remove('d-none');
-            return;
-          }
-
-          if (newPass !== confirm) {
-            passwordChangeErrorModal.textContent = '⚠️ Las contraseñas no coinciden.';
-            passwordChangeErrorModal.classList.remove('d-none');
-            return;
-          }
-
-          // Deshabilitar botón
-          btnCambiarPasswordModal.disabled = true;
-          btnCambiarPasswordModal.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
-
-          try {
-            const response = await fetch('/dashboard/cambiar-password', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                currentPassword: current,
-                newPassword: newPass
-              })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-              passwordChangeSuccessModal.textContent = '✅ ' + result.message;
-              passwordChangeSuccessModal.classList.remove('d-none');
-              
-              // Recargar la página para que el modal desaparezca
-              setTimeout(() => {
-                window.location.reload();
-              }, 1500);
-            } else {
-              // Mostrar el error específico del backend
-              passwordChangeErrorModal.textContent = '❌ ' + result.error;
-              passwordChangeErrorModal.classList.remove('d-none');
-              btnCambiarPasswordModal.disabled = false;
-              btnCambiarPasswordModal.innerHTML = '<i class="fas fa-save"></i> Cambiar Contraseña';
-            }
-          } catch (error) {
-            console.error('Error:', error);
-            passwordChangeErrorModal.textContent = '❌ Error de conexión: ' + error.message;
-            passwordChangeErrorModal.classList.remove('d-none');
-            btnCambiarPasswordModal.disabled = false;
-            btnCambiarPasswordModal.innerHTML = '<i class="fas fa-save"></i> Cambiar Contraseña';
-          }
-        });
-      }
-
-      // ============================================================
-      //  SIDEBAR (se mantiene pero con pointer-events: none cuando hay modal)
-      // ============================================================
-      const sidebarModal = document.getElementById('sidebarModal');
-      const modalOverlay = document.getElementById('modalOverlay');
-      const menuToggle = document.getElementById('menuToggle');
-      const closeSidebar = document.getElementById('closeSidebar');
-
-      if (sidebarModal && modalOverlay && menuToggle && closeSidebar) {
-        function openMenu() {
-          if (menuToggle.classList.contains('disabled')) return;
-          sidebarModal.classList.add('open');
-          modalOverlay.classList.add('active');
-          document.body.style.overflow = 'hidden';
-        }
-
-        function closeMenu() {
-          sidebarModal.classList.remove('open');
-          modalOverlay.classList.remove('active');
-          document.body.style.overflow = 'auto';
-        }
-
-        menuToggle.addEventListener('click', openMenu);
-        closeSidebar.addEventListener('click', closeMenu);
-        modalOverlay.addEventListener('click', closeMenu);
-
-        document.addEventListener('keydown', function(e) {
-          if (e.key === 'Escape') closeMenu();
-        });
-      }
-
-      // ============================================================
-      //  DROPDOWN DE USUARIO (solo funcional si no es primer ingreso)
-      // ============================================================
-      const userMenuButton = document.getElementById('userMenuButton');
-      const userDropdown = document.getElementById('userDropdown');
-      let isDropdownOpen = false;
-
-      if (userMenuButton && userDropdown) {
-        function abrirDropdownUsuario() {
-          if (esPrimerIngreso) return;
-          if (isDropdownOpen) {
-            cerrarDropdownUsuario();
-            return;
-          }
-          const rect = userMenuButton.getBoundingClientRect();
-          const dropdownWidth = Math.min(320, window.innerWidth - 20);
-          let top = rect.bottom + 8;
-          let right = window.innerWidth - rect.right + 10;
-          if (top + 500 > window.innerHeight) {
-            top = rect.top - 8 - 500;
-          }
-          if (top < 10) top = 10;
-          userDropdown.style.top = top + 'px';
-          userDropdown.style.right = right + 'px';
-          userDropdown.style.left = 'auto';
-          userDropdown.style.width = dropdownWidth + 'px';
-          userDropdown.style.display = 'block';
-          userDropdown.classList.add('show');
-          userMenuButton.setAttribute('aria-expanded', 'true');
-          isDropdownOpen = true;
-        }
-
-        function cerrarDropdownUsuario() {
-          userDropdown.style.display = 'none';
-          userDropdown.classList.remove('show');
-          userMenuButton.setAttribute('aria-expanded', 'false');
-          isDropdownOpen = false;
-        }
-
-        userMenuButton.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          abrirDropdownUsuario();
-        });
-
-        document.addEventListener('click', function(e) {
-          const container = document.getElementById('userDropdownContainer');
-          if (container && !container.contains(e.target) && isDropdownOpen) {
-            cerrarDropdownUsuario();
-          }
-        });
-
-        document.addEventListener('keydown', function(e) {
-          if (e.key === 'Escape' && isDropdownOpen) {
-            cerrarDropdownUsuario();
-          }
-        });
-      }
-
-      // ============================================================
-      //  NAVEGACIÓN ENTRE OPCIONES DEL DROPDOWN (solo si no es primer ingreso)
-      // ============================================================
-      const configOptions = document.querySelectorAll('.config-option');
-      const dropdownPerfil = document.getElementById('dropdownPerfil');
-      const dropdownPassword = document.getElementById('dropdownPassword');
-
-      function showContent(contentId) {
-        if (esPrimerIngreso) return;
-        if (dropdownPerfil) dropdownPerfil.style.display = 'none';
-        if (dropdownPassword) dropdownPassword.style.display = 'none';
-        const target = document.getElementById(contentId);
-        if (target) target.style.display = 'block';
-
-        configOptions.forEach(opt => {
-          opt.classList.remove('active');
-          opt.style.background = 'transparent';
-          opt.style.borderLeft = 'none';
-          const option = opt.getAttribute('data-option');
-          if ((option === 'perfil' && contentId === 'dropdownPerfil') ||
-              (option === 'password' && contentId === 'dropdownPassword')) {
-            opt.classList.add('active');
-            opt.style.background = '#f0f7ff';
-            opt.style.borderLeft = '3px solid #1a5276';
-          }
-        });
-      }
-
-      configOptions.forEach(option => {
-        option.addEventListener('click', function(e) {
-          e.stopPropagation();
-          if (esPrimerIngreso) return;
-          if (this.style.opacity === '0.5' || this.style.cursor === 'default') return;
-          const optionName = this.getAttribute('data-option');
-          if (optionName === 'perfil') showContent('dropdownPerfil');
-          else if (optionName === 'password') showContent('dropdownPassword');
-        });
-      });
-
-      // Activar "Perfil" por defecto (solo si no es primer ingreso)
-      if (!esPrimerIngreso) {
-        setTimeout(function() {
-          showContent('dropdownPerfil');
-        }, 100);
-      }
-
-      // ============================================================
-      //  RESTAURAR BASE DE DATOS
-      // ============================================================
-      const btnRestore = document.getElementById('btnRestore');
-      const fileRestore = document.getElementById('fileRestore');
-
-      if (btnRestore && fileRestore) {
-        btnRestore.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (confirm(' ADVERTENCIA: La restauración reemplazará TODOS los datos actuales.\n\n¿Estás seguro de que deseas continuar?')) {
-            fileRestore.click();
-          }
-        });
-
-        fileRestore.addEventListener('change', async function(e) {
-          const file = e.target.files[0];
-          if (!file) return;
-          if (!file.name.endsWith('.sql')) {
-            alert(' Por favor, selecciona un archivo con extensión .sql');
-            fileRestore.value = '';
-            return;
-          }
-          const formData = new FormData();
-          formData.append('backup', file);
-          const originalText = btnRestore.innerHTML;
-          btnRestore.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restaurando...';
-          btnRestore.disabled = true;
-          try {
-            const response = await fetch('/bitacora/parametros/restore', {
-              method: 'POST',
-              body: formData
-            });
-            const data = await response.json();
-            if (data.success || data.ok) {
-              alert('✅ ' + (data.message || data.mensaje || 'Base de datos restaurada exitosamente.'));
-              setTimeout(() => {
-                window.location.reload();
-              }, 2000);
-            } else {
-              alert('❌ ' + (data.message || data.mensaje || 'Error al restaurar la base de datos.'));
-            }
-          } catch (err) {
-            console.error(' Error al restaurar:', err);
-            alert(' Error al restaurar: ' + err.message);
-          } finally {
-            fileRestore.value = '';
-            btnRestore.innerHTML = originalText;
-            btnRestore.disabled = false;
-          }
-        });
-      }
-
-      // ============================================================
-      //  APLICAR PERMISOS
-      // ============================================================
-      async function aplicarPermisosMenu() {
-        try {
-          console.log(' Cargando permisos desde la API...');
-          const response = await fetch('/dashboard/permisos');
-          const data = await response.json();
-          if (data.error) {
-            console.error(' Error al cargar permisos:', data.error);
-            usarPermisosPorDefecto();
-            return;
-          }
-          console.log(' Permisos cargados:', data);
-          const permisosMap = {};
-          data.permisos.forEach(p => {
-            permisosMap[p.id] = {
-              consulta: p.consulta || false,
-            };
-          });
-          aplicarPermisosAlMenu(permisosMap);
-        } catch (error) {
-          console.error(' Error al cargar permisos desde API:', error);
-          usarPermisosPorDefecto();
-        }
-      }
-
-      function aplicarPermisosAlMenu(permisosMap) {
-        const menuItems = document.querySelectorAll('.sidebar-item[data-objeto-id]');
-        menuItems.forEach(item => {
-          const objetoId = parseInt(item.getAttribute('data-objeto-id'));
-          const permiso = permisosMap[objetoId];
-          if (!permiso || !permiso.consulta) {
-            item.classList.add('oculto');
-            item.style.display = 'none';
-          } else {
-            item.classList.remove('oculto');
-            item.style.display = 'flex';
-          }
-        });
-        ocultarCategoriasVacias();
-      }
-
-      function usarPermisosPorDefecto() {
-        console.log(' Usando permisos por defecto (fallback)');
-        const menuItems = document.querySelectorAll('.sidebar-item[data-objeto-id]');
-        menuItems.forEach(item => {
-          item.classList.remove('oculto');
-          item.style.display = 'flex';
-        });
-        const categorias = document.querySelectorAll('.sidebar-category');
-        categorias.forEach(cat => {
-          cat.classList.remove('oculto');
-          cat.style.display = 'block';
-        });
-      }
-
-      function ocultarCategoriasVacias() {
-        const categorias = document.querySelectorAll('.sidebar-category');
-        categorias.forEach(categoria => {
-          let siguiente = categoria.nextElementSibling;
-          let hayItemsVisibles = false;
-          while (siguiente && !siguiente.classList.contains('sidebar-category')) {
-            if (siguiente.classList.contains('sidebar-item') && 
-                !siguiente.classList.contains('oculto') &&
-                !siguiente.classList.contains('logout-item') &&
-                !siguiente.classList.contains('sidebar-divider') &&
-                siguiente.style.display !== 'none') {
-              hayItemsVisibles = true;
-              break;
-            }
-            siguiente = siguiente.nextElementSibling;
-          }
-          if (!hayItemsVisibles) {
-            categoria.classList.add('oculto');
-            categoria.style.display = 'none';
-          } else {
-            categoria.classList.remove('oculto');
-            categoria.style.display = 'block';
-          }
-        });
-      }
-
-      setTimeout(function() {
-        aplicarPermisosMenu();
-      }, 500);
-
-      console.log(' Dashboard con permisos inicializado correctamente');
-    });
-  </script>
-
-  <script src="/js/sidebar.js"></script>
-
+  <script src="/js/dashboard.js"></script>
 </body>
 </html>
