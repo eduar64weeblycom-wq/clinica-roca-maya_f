@@ -1,9 +1,9 @@
 // ============================================================
-// RUTAS DEDICADAS PARA EXCEL - INDEPENDIENTE
+// RUTAS DEDICADAS PARA EXCEL - INDEPENDIENTE (PostgreSQL)
 // ============================================================
 const express = require("express");
 const router = express.Router();
-const pool = require("../database/db");
+const pool = require("../database/db"); // PostgreSQL pool (pg)
 const xl = require('excel4node');
 const { registrarBitacora } = require("../services/bitacora.service");
 
@@ -35,81 +35,87 @@ router.get("/test", (req, res) => {
 // ============================================================
 router.get("/preclinica", async (req, res) => {
     try {
-        console.log(" Generando Excel de Preclínica...");
+        console.log("📊 Generando Excel de Preclínica...");
         console.log(" Query params:", req.query);
 
         const usuario = req.user || null;
         const { paciente, telefono, identidad, fecha, estado } = req.query;
 
         // ============================================================
-        // CONSULTA SQL
+        // CONSULTA SQL (PostgreSQL)
         // ============================================================
         let sql = `
             SELECT 
-                p.ID_PRECLINICA,
-                p.ID_CITA,
-                p.FECHA_REGISTRO,
-                p.TEMPERATURA,
-                p.PRESION_SISTOLICA,
-                p.PRESION_DIASTOLICA,
-                p.FRECUENCIA_CARDIACA,
-                p.FRECUENCIA_RESPIRATORIA,
-                p.SATURACION_OXIGENO,
-                p.PESO,
-                p.TALLA,
-                p.IMC,
-                p.GLUCOSA,
-                p.PERIMETRO_ABDOMINAL,
-                p.ESTADO_GENERAL,
-                p.OBSERVACIONES,
-                u.NOMBRE_USUARIO AS ENFERMERA,
-                c.ESTADO AS ESTADO_CITA,
-                CONCAT(pa.NOMBRES, ' ', pa.APELLIDOS) AS NOMBRE_PACIENTE,
-                pa.NUMERO_DOCUMENTO_IDENTIDAD AS IDENTIDAD_PACIENTE,
-                pa.TELEFONO,
-                pa.CORREO_ELECTRONICO
-            FROM TBL_PRECLINICA p
-            INNER JOIN TBL_CITAS c ON p.ID_CITA = c.ID_CITA
-            INNER JOIN TBL_PACIENTE pa ON c.ID_PACIENTE = pa.ID_PACIENTE
-            LEFT JOIN TBL_MS_USUARIO u ON p.ID_USUARIO_ENFERMERIA = u.ID_USUARIO
+                p.id_preclinica,
+                p.id_cita,
+                p.fecha_registro,
+                p.temperatura,
+                p.presion_sistolica,
+                p.presion_diastolica,
+                p.frecuencia_cardiaca,
+                p.frecuencia_respiratoria,
+                p.saturacion_oxigeno,
+                p.peso,
+                p.talla,
+                p.imc,
+                p.glucosa,
+                p.perimetro_abdominal,
+                p.estado_general,
+                p.observaciones,
+                u.nombre_usuario AS enfermera,
+                c.estado AS estado_cita,
+                CONCAT(pa.nombres, ' ', pa.apellidos) AS nombre_paciente,
+                pa.numero_documento_identidad AS identidad_paciente,
+                pa.telefono,
+                pa.correo_electronico
+            FROM tbl_preclinica p
+            INNER JOIN tbl_citas c ON p.id_cita = c.id_cita
+            INNER JOIN tbl_paciente pa ON c.id_paciente = pa.id_paciente
+            LEFT JOIN tbl_ms_usuario u ON p.id_usuario_enfermeria = u.id_usuario
             WHERE 1=1
         `;
 
         const params = [];
+        let paramIndex = 1;
 
         // Aplicar filtros si existen
         if (paciente) {
-            sql += ` AND (CONCAT(pa.NOMBRES, ' ', pa.APELLIDOS) LIKE ? OR pa.NOMBRES LIKE ? OR pa.APELLIDOS LIKE ?)`;
+            sql += ` AND (CONCAT(pa.nombres, ' ', pa.apellidos) ILIKE $${paramIndex} OR pa.nombres ILIKE $${paramIndex} OR pa.apellidos ILIKE $${paramIndex})`;
             const searchTerm = `%${paciente}%`;
-            params.push(searchTerm, searchTerm, searchTerm);
+            params.push(searchTerm);
+            paramIndex++;
         }
 
         if (telefono) {
-            sql += ` AND pa.TELEFONO LIKE ?`;
+            sql += ` AND pa.telefono ILIKE $${paramIndex}`;
             params.push(`%${telefono}%`);
+            paramIndex++;
         }
 
         if (identidad) {
-            sql += ` AND pa.NUMERO_DOCUMENTO_IDENTIDAD LIKE ?`;
+            sql += ` AND pa.numero_documento_identidad ILIKE $${paramIndex}`;
             params.push(`%${identidad}%`);
+            paramIndex++;
         }
 
         if (fecha) {
-            sql += ` AND DATE(c.FECHA_CITA) = ?`;
+            sql += ` AND DATE(c.fecha_cita) = $${paramIndex}`;
             params.push(fecha);
+            paramIndex++;
         }
 
         if (estado) {
-            sql += ` AND c.ESTADO = ?`;
+            sql += ` AND c.estado = $${paramIndex}`;
             params.push(estado.toUpperCase());
+            paramIndex++;
         }
 
-        sql += ` ORDER BY p.FECHA_REGISTRO DESC`;
+        sql += ` ORDER BY p.fecha_registro DESC`;
 
         console.log(" SQL Query:", sql);
         console.log(" Parámetros:", params);
 
-        const [preclinicas] = await pool.query(sql, params);
+        const { rows: preclinicas } = await pool.query(sql, params);
 
         console.log(` Preclínicas encontradas: ${preclinicas.length}`);
 
@@ -121,30 +127,24 @@ router.get("/preclinica", async (req, res) => {
         }
 
         // ============================================================
-        //  GENERAR NOMBRE DEL ARCHIVO CON EL NOMBRE DEL PACIENTE
+        // GENERAR NOMBRE DEL ARCHIVO CON EL NOMBRE DEL PACIENTE
         // ============================================================
         let nombreBase = 'Preclinica';
 
-        // Obtener el nombre del paciente del primer resultado
-        if (preclinicas.length > 0 && preclinicas[0].NOMBRE_PACIENTE) {
-            const nombreCompleto = preclinicas[0].NOMBRE_PACIENTE;
-            
-            // Verificar si todas las preclínicas son del mismo paciente
-            const todosMismoPaciente = preclinicas.every(p => p.NOMBRE_PACIENTE === nombreCompleto);
-            
+        if (preclinicas.length > 0 && preclinicas[0].nombre_paciente) {
+            const nombreCompleto = preclinicas[0].nombre_paciente;
+            const todosMismoPaciente = preclinicas.every(p => p.nombre_paciente === nombreCompleto);
+
             if (todosMismoPaciente) {
-                // Usar el nombre completo del paciente
                 const nombreLimpio = nombreCompleto
                     .replace(/[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ\s]/g, '')
                     .trim()
                     .replace(/\s+/g, '_')
                     .substring(0, 50)
                     .toUpperCase();
-                
                 nombreBase = nombreLimpio;
                 console.log(` Todos los pacientes son: ${nombreCompleto} → ${nombreLimpio}`);
             } else {
-                // Múltiples pacientes diferentes
                 if (paciente && paciente.length > 0) {
                     const nombreFiltro = paciente
                         .replace(/[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ\s]/g, '')
@@ -156,17 +156,14 @@ router.get("/preclinica", async (req, res) => {
                 } else {
                     nombreBase = 'Preclinica_Varios_Pacientes';
                 }
-                console.log(` Múltiples pacientes diferentes`);
             }
         }
 
-        // Agregar fecha si existe filtro de fecha
         if (fecha) {
             const fechaFormateada = fecha.replace(/-/g, '');
             nombreBase += `_${fechaFormateada}`;
         }
 
-        // Agregar fecha actual
         const fechaActual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         const fileName = `${nombreBase}_${fechaActual}.xlsx`;
 
@@ -178,7 +175,6 @@ router.get("/preclinica", async (req, res) => {
         const wb = new xl.Workbook();
         const ws = wb.addWorksheet('Preclínica');
 
-        // Estilos
         const headerStyle = wb.createStyle({
             font: { bold: true, color: '#FFFFFF', size: 12 },
             fill: { type: 'pattern', patternType: 'solid', bgColor: '#1a3c6e', fgColor: '#1a3c6e' },
@@ -205,7 +201,6 @@ router.get("/preclinica", async (req, res) => {
             },
         });
 
-        // Encabezados
         const headers = [
             'ID Preclínica', 'ID Cita', 'Paciente', 'Identidad', 'Teléfono',
             'Fecha Registro', 'Temperatura °C', 'Presión Sist.', 'Presión Diast.',
@@ -218,41 +213,38 @@ router.get("/preclinica", async (req, res) => {
             ws.cell(1, index + 1).string(header).style(headerStyle);
         });
 
-        // Datos
         preclinicas.forEach((item, rowIndex) => {
             const row = rowIndex + 2;
 
-            ws.cell(row, 1).number(item.ID_PRECLINICA || 0).style(cellCenterStyle);
-            ws.cell(row, 2).number(item.ID_CITA || 0).style(cellCenterStyle);
-            ws.cell(row, 3).string(item.NOMBRE_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 4).string(item.IDENTIDAD_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 5).string(item.TELEFONO || '').style(cellStyle);
-            ws.cell(row, 6).string(item.FECHA_REGISTRO ? 
-                new Date(item.FECHA_REGISTRO).toLocaleString('es-ES') : '').style(cellStyle);
-            ws.cell(row, 7).number(parseFloat(item.TEMPERATURA) || 0).style(cellCenterStyle);
-            ws.cell(row, 8).number(parseInt(item.PRESION_SISTOLICA) || 0).style(cellCenterStyle);
-            ws.cell(row, 9).number(parseInt(item.PRESION_DIASTOLICA) || 0).style(cellCenterStyle);
-            ws.cell(row, 10).number(parseInt(item.FRECUENCIA_CARDIACA) || 0).style(cellCenterStyle);
-            ws.cell(row, 11).number(parseInt(item.FRECUENCIA_RESPIRATORIA) || 0).style(cellCenterStyle);
-            ws.cell(row, 12).number(parseFloat(item.SATURACION_OXIGENO) || 0).style(cellCenterStyle);
-            ws.cell(row, 13).number(parseFloat(item.PESO) || 0).style(cellCenterStyle);
-            ws.cell(row, 14).number(parseFloat(item.TALLA) || 0).style(cellCenterStyle);
-            ws.cell(row, 15).number(parseFloat(item.IMC) || 0).style(cellCenterStyle);
-            ws.cell(row, 16).number(parseFloat(item.GLUCOSA) || 0).style(cellCenterStyle);
-            ws.cell(row, 17).number(parseFloat(item.PERIMETRO_ABDOMINAL) || 0).style(cellCenterStyle);
-            ws.cell(row, 18).string(item.ESTADO_GENERAL || '').style(cellStyle);
-            ws.cell(row, 19).string(item.ESTADO_CITA || '').style(cellStyle);
-            ws.cell(row, 20).string(item.ENFERMERA || '').style(cellStyle);
-            ws.cell(row, 21).string((item.OBSERVACIONES || '').substring(0, 500)).style(cellStyle);
+            ws.cell(row, 1).number(item.id_preclinica || 0).style(cellCenterStyle);
+            ws.cell(row, 2).number(item.id_cita || 0).style(cellCenterStyle);
+            ws.cell(row, 3).string(item.nombre_paciente || '').style(cellStyle);
+            ws.cell(row, 4).string(item.identidad_paciente || '').style(cellStyle);
+            ws.cell(row, 5).string(item.telefono || '').style(cellStyle);
+            ws.cell(row, 6).string(item.fecha_registro ? 
+                new Date(item.fecha_registro).toLocaleString('es-ES') : '').style(cellStyle);
+            ws.cell(row, 7).number(parseFloat(item.temperatura) || 0).style(cellCenterStyle);
+            ws.cell(row, 8).number(parseInt(item.presion_sistolica) || 0).style(cellCenterStyle);
+            ws.cell(row, 9).number(parseInt(item.presion_diastolica) || 0).style(cellCenterStyle);
+            ws.cell(row, 10).number(parseInt(item.frecuencia_cardiaca) || 0).style(cellCenterStyle);
+            ws.cell(row, 11).number(parseInt(item.frecuencia_respiratoria) || 0).style(cellCenterStyle);
+            ws.cell(row, 12).number(parseFloat(item.saturacion_oxigeno) || 0).style(cellCenterStyle);
+            ws.cell(row, 13).number(parseFloat(item.peso) || 0).style(cellCenterStyle);
+            ws.cell(row, 14).number(parseFloat(item.talla) || 0).style(cellCenterStyle);
+            ws.cell(row, 15).number(parseFloat(item.imc) || 0).style(cellCenterStyle);
+            ws.cell(row, 16).number(parseFloat(item.glucosa) || 0).style(cellCenterStyle);
+            ws.cell(row, 17).number(parseFloat(item.perimetro_abdominal) || 0).style(cellCenterStyle);
+            ws.cell(row, 18).string(item.estado_general || '').style(cellStyle);
+            ws.cell(row, 19).string(item.estado_cita || '').style(cellStyle);
+            ws.cell(row, 20).string(item.enfermera || '').style(cellStyle);
+            ws.cell(row, 21).string((item.observaciones || '').substring(0, 500)).style(cellStyle);
         });
 
-        // Ancho de columnas
         const columnWidths = [14, 10, 35, 22, 18, 22, 16, 16, 16, 14, 14, 14, 14, 14, 12, 16, 20, 18, 18, 25, 45];
         columnWidths.forEach((width, index) => {
             ws.column(index + 1).setWidth(width);
         });
 
-        // Agregar fila de total
         const totalRow = preclinicas.length + 2;
         ws.cell(totalRow, 1).string('TOTAL REGISTROS:').style({
             font: { bold: true, size: 11 },
@@ -263,9 +255,6 @@ router.get("/preclinica", async (req, res) => {
             alignment: { horizontal: 'center', vertical: 'center' }
         });
 
-        // ============================================================
-        // ENVIAR ARCHIVO
-        // ============================================================
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(fileName)}`);
 
@@ -274,7 +263,6 @@ router.get("/preclinica", async (req, res) => {
         console.log(` Excel de Preclínica generado correctamente: ${preclinicas.length} registros`);
         console.log(` Archivo: ${fileName}`);
 
-        // Registrar en bitácora
         try {
             await registrarBitacora({
                 usuario: req.user?.USUARIO || "SISTEMA",
@@ -297,25 +285,26 @@ router.get("/preclinica", async (req, res) => {
         });
     }
 });
+
 // ============================================================
 // GET /excel/usuarios -> Descargar Excel de usuarios
 // ============================================================
 router.get("/usuarios", async (req, res) => {
     try {
-        console.log(" Generando Excel de usuarios...");
+        console.log("📊 Generando Excel de usuarios...");
 
-        const [usuarios] = await pool.query(`
+        const { rows: usuarios } = await pool.query(`
             SELECT 
-                u.USUARIO,
-                u.NOMBRE_USUARIO,
-                r.ROL AS ROL,
-                u.ESTADO,
-                u.CORREO_ELECTRONICO,
-                CASE WHEN u.ACTIVO_2FA = 1 THEN 'Sí' ELSE 'No' END AS ACTIVO_2FA,
-                u.FECHA_ULTIMA_CONEXION
-            FROM TBL_MS_USUARIO u
-            INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-            ORDER BY u.ID_USUARIO
+                u.usuario,
+                u.nombre_usuario,
+                r.rol,
+                u.estado,
+                u.correo_electronico,
+                CASE WHEN u.activo_2fa = true THEN 'Sí' ELSE 'No' END AS activo_2fa,
+                u.fecha_ultima_conexion
+            FROM tbl_ms_usuario u
+            INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol
+            ORDER BY u.id_usuario
         `);
 
         console.log(` Usuarios encontrados: ${usuarios.length}`);
@@ -354,13 +343,13 @@ router.get("/usuarios", async (req, res) => {
 
         usuarios.forEach((usuario, rowIndex) => {
             const row = rowIndex + 2;
-            ws.cell(row, 1).string(usuario.USUARIO || '').style(cellStyle);
-            ws.cell(row, 2).string(usuario.NOMBRE_USUARIO || '').style(cellStyle);
-            ws.cell(row, 3).string(usuario.ROL || '').style(cellStyle);
-            ws.cell(row, 4).string(usuario.ESTADO || '').style(cellStyle);
-            ws.cell(row, 5).string(usuario.CORREO_ELECTRONICO || '').style(cellStyle);
-            ws.cell(row, 6).string(usuario.ACTIVO_2FA || 'No').style(cellStyle);
-            ws.cell(row, 7).string(usuario.FECHA_ULTIMA_CONEXION ? new Date(usuario.FECHA_ULTIMA_CONEXION).toLocaleString() : 'Nunca').style(cellStyle);
+            ws.cell(row, 1).string(usuario.usuario || '').style(cellStyle);
+            ws.cell(row, 2).string(usuario.nombre_usuario || '').style(cellStyle);
+            ws.cell(row, 3).string(usuario.rol || '').style(cellStyle);
+            ws.cell(row, 4).string(usuario.estado || '').style(cellStyle);
+            ws.cell(row, 5).string(usuario.correo_electronico || '').style(cellStyle);
+            ws.cell(row, 6).string(usuario.activo_2fa || 'No').style(cellStyle);
+            ws.cell(row, 7).string(usuario.fecha_ultima_conexion ? new Date(usuario.fecha_ultima_conexion).toLocaleString() : 'Nunca').style(cellStyle);
         });
 
         ws.column(1).setWidth(20);
@@ -371,7 +360,6 @@ router.get("/usuarios", async (req, res) => {
         ws.column(6).setWidth(18);
         ws.column(7).setWidth(25);
 
-        // USAR NOMBRE DE VARIABLE DIFERENTE: fechaActual2 en lugar de fecha
         const fechaActual2 = new Date().toISOString().split('T')[0];
         const fileName = `Usuarios_${fechaActual2}.xlsx`;
 
@@ -404,86 +392,94 @@ router.get("/usuarios", async (req, res) => {
         });
     }
 });
+
 // ============================================================
 // GET /excel/consultas -> Descargar Excel de consultas médicas
 // ============================================================
 router.get("/consultas", async (req, res) => {
     try {
-        console.log(" Generando Excel de citas para consulta médica...");
+        console.log("📊 Generando Excel de citas para consulta médica...");
         console.log(" Query params:", req.query);
 
         const usuario = req.user || null;
         const { paciente, telefono, identidad, fecha, tipo } = req.query;
 
         // ============================================================
-        // CONSULTA SQL
+        // CONSULTA SQL (PostgreSQL)
         // ============================================================
         let sql = `
             SELECT 
-                c.ID_CITA,
-                c.FECHA_CITA,
-                c.ESTADO,
-                c.TIPO_CITA,
-                c.PRIORIDAD,
-                c.MOTIVO_CONSULTA,
-                c.OBSERVACIONES,
-                CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
-                p.TELEFONO,
-                p.NUMERO_DOCUMENTO_IDENTIDAD,
-                u.NOMBRE_USUARIO AS DOCTOR,
-                pr.TEMPERATURA,
-                pr.PRESION_SISTOLICA,
-                pr.PRESION_DIASTOLICA,
-                pr.PESO,
-                pr.TALLA,
-                pr.IMC,
-                cm.ID_CONSULTA,
-                cm.DIAGNOSTICO_PRINCIPAL,
-                cm.TRATAMIENTO,
-                cm.RECOMENDACIONES,
-                cm.FECHA_CONSULTA
-            FROM TBL_CITAS c
-            INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
-            INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
-            LEFT JOIN TBL_PRECLINICA pr ON c.ID_CITA = pr.ID_CITA
-            LEFT JOIN TBL_CONSULTA_MEDICA cm ON c.ID_CITA = cm.ID_CITA
-            WHERE c.ESTADO IN ('CONSULTA_MEDICA', 'PRECLINICA')
+                c.id_cita,
+                c.fecha_cita,
+                c.estado,
+                c.tipo_cita,
+                c.prioridad,
+                c.motivo_consulta,
+                c.observaciones,
+                CONCAT(p.nombres, ' ', p.apellidos) AS nombre_paciente,
+                p.telefono,
+                p.numero_documento_identidad,
+                u.nombre_usuario AS doctor,
+                pr.temperatura,
+                pr.presion_sistolica,
+                pr.presion_diastolica,
+                pr.peso,
+                pr.talla,
+                pr.imc,
+                cm.id_consulta,
+                cm.diagnostico_principal,
+                cm.tratamiento,
+                cm.recomendaciones,
+                cm.fecha_consulta
+            FROM tbl_citas c
+            INNER JOIN tbl_paciente p ON c.id_paciente = p.id_paciente
+            INNER JOIN tbl_ms_usuario u ON c.id_doctor = u.id_usuario
+            LEFT JOIN tbl_preclinica pr ON c.id_cita = pr.id_cita
+            LEFT JOIN tbl_consulta_medica cm ON c.id_cita = cm.id_cita
+            WHERE c.estado IN ('CONSULTA_MEDICA', 'PRECLINICA')
         `;
 
         const params = [];
+        let paramIndex = 1;
 
         if (usuario && usuario.ROL === 'DOCTOR') {
-            sql += ` AND c.ID_DOCTOR = ?`;
+            sql += ` AND c.id_doctor = $${paramIndex}`;
             params.push(usuario.ID_USUARIO);
+            paramIndex++;
         }
 
         if (paciente) {
-            sql += ` AND (CONCAT(p.NOMBRES, ' ', p.APELLIDOS) LIKE ? OR p.NOMBRES LIKE ? OR p.APELLIDOS LIKE ?)`;
+            sql += ` AND (CONCAT(p.nombres, ' ', p.apellidos) ILIKE $${paramIndex} OR p.nombres ILIKE $${paramIndex} OR p.apellidos ILIKE $${paramIndex})`;
             const searchTerm = `%${paciente}%`;
-            params.push(searchTerm, searchTerm, searchTerm);
+            params.push(searchTerm);
+            paramIndex++;
         }
 
         if (telefono) {
-            sql += ` AND p.TELEFONO LIKE ?`;
+            sql += ` AND p.telefono ILIKE $${paramIndex}`;
             params.push(`%${telefono}%`);
+            paramIndex++;
         }
 
         if (identidad) {
-            sql += ` AND p.NUMERO_DOCUMENTO_IDENTIDAD LIKE ?`;
+            sql += ` AND p.numero_documento_identidad ILIKE $${paramIndex}`;
             params.push(`%${identidad}%`);
+            paramIndex++;
         }
 
         if (fecha) {
-            sql += ` AND DATE(c.FECHA_CITA) = ?`;
+            sql += ` AND DATE(c.fecha_cita) = $${paramIndex}`;
             params.push(fecha);
+            paramIndex++;
         }
 
         if (tipo) {
-            sql += ` AND c.TIPO_CITA = ?`;
+            sql += ` AND c.tipo_cita = $${paramIndex}`;
             params.push(tipo);
+            paramIndex++;
         }
 
-        sql += ` ORDER BY c.FECHA_CITA DESC`;
+        sql += ` ORDER BY c.fecha_cita DESC`;
 
         console.log(" SQL Query:", sql);
         console.log(" Parámetros:", params);
@@ -500,31 +496,24 @@ router.get("/consultas", async (req, res) => {
         }
 
         // ============================================================
-        // GENERAR NOMBRE DEL ARCHIVO CON EL NOMBRE DEL PACIENTE
+        // GENERAR NOMBRE DEL ARCHIVO
         // ============================================================
         let nombreBase = 'Consultas';
 
-        // Obtener el nombre del paciente del primer resultado
-        if (citas.length > 0 && citas[0].NOMBRE_PACIENTE) {
-            const nombreCompleto = citas[0].NOMBRE_PACIENTE;
-            
-            // Verificar si todas las citas son del mismo paciente
-            const todosMismoPaciente = citas.every(c => c.NOMBRE_PACIENTE === nombreCompleto);
-            
+        if (citas.length > 0 && citas[0].nombre_paciente) {
+            const nombreCompleto = citas[0].nombre_paciente;
+            const todosMismoPaciente = citas.every(c => c.nombre_paciente === nombreCompleto);
+
             if (todosMismoPaciente) {
-                // Usar el nombre completo del paciente
                 const nombreLimpio = nombreCompleto
                     .replace(/[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ\s]/g, '')
                     .trim()
                     .replace(/\s+/g, '_')
                     .substring(0, 50)
                     .toUpperCase();
-                
                 nombreBase = nombreLimpio;
                 console.log(` Todos los pacientes son: ${nombreCompleto} → ${nombreLimpio}`);
             } else {
-                // Múltiples pacientes diferentes
-                // Si el filtro tenía un nombre, usarlo como referencia
                 if (paciente && paciente.length > 0) {
                     const nombreFiltro = paciente
                         .replace(/[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ\s]/g, '')
@@ -536,11 +525,9 @@ router.get("/consultas", async (req, res) => {
                 } else {
                     nombreBase = 'Consultas_Varios_Pacientes';
                 }
-                console.log(` Múltiples pacientes diferentes`);
             }
         }
 
-        // Agregar fecha actual
         const fechaActual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         const fileName = `${nombreBase}_${fechaActual}.xlsx`;
 
@@ -552,7 +539,6 @@ router.get("/consultas", async (req, res) => {
         const wb = new xl.Workbook();
         const ws = wb.addWorksheet('Consultas Médicas');
 
-        // Estilos
         const headerStyle = wb.createStyle({
             font: { bold: true, color: '#FFFFFF', size: 12 },
             fill: { type: 'pattern', patternType: 'solid', bgColor: '#1a3c6e', fgColor: '#1a3c6e' },
@@ -579,7 +565,6 @@ router.get("/consultas", async (req, res) => {
             },
         });
 
-        // Encabezados
         const headers = [
             'ID Cita', 'Paciente', 'Identidad', 'Teléfono',
             'Doctor', 'Fecha Cita', 'Estado', 'Tipo', 'Prioridad',
@@ -593,33 +578,31 @@ router.get("/consultas", async (req, res) => {
             ws.cell(1, index + 1).string(header).style(headerStyle);
         });
 
-        // Datos
         citas.forEach((c, idx) => {
             const row = idx + 2;
-            ws.cell(row, 1).number(c.ID_CITA || 0).style(cellCenterStyle);
-            ws.cell(row, 2).string(c.NOMBRE_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 3).string(c.NUMERO_DOCUMENTO_IDENTIDAD || '').style(cellStyle);
-            ws.cell(row, 4).string(c.TELEFONO || '').style(cellStyle);
-            ws.cell(row, 5).string(c.DOCTOR || '').style(cellStyle);
-            ws.cell(row, 6).string(c.FECHA_CITA ? new Date(c.FECHA_CITA).toLocaleString('es-ES') : '').style(cellStyle);
-            ws.cell(row, 7).string(c.ESTADO || '').style(cellCenterStyle);
-            ws.cell(row, 8).string(c.TIPO_CITA || '').style(cellCenterStyle);
-            ws.cell(row, 9).string(c.PRIORIDAD || 'NORMAL').style(cellCenterStyle);
-            ws.cell(row, 10).string(c.MOTIVO_CONSULTA || '').style(cellStyle);
-            ws.cell(row, 11).number(parseFloat(c.TEMPERATURA) || 0).style(cellCenterStyle);
-            ws.cell(row, 12).number(parseInt(c.PRESION_SISTOLICA) || 0).style(cellCenterStyle);
-            ws.cell(row, 13).number(parseInt(c.PRESION_DIASTOLICA) || 0).style(cellCenterStyle);
-            ws.cell(row, 14).number(parseFloat(c.PESO) || 0).style(cellCenterStyle);
-            ws.cell(row, 15).number(parseFloat(c.TALLA) || 0).style(cellCenterStyle);
-            ws.cell(row, 16).number(parseFloat(c.IMC) || 0).style(cellCenterStyle);
-            ws.cell(row, 17).string(c.DIAGNOSTICO_PRINCIPAL || '').style(cellStyle);
-            ws.cell(row, 18).string(c.TRATAMIENTO || '').style(cellStyle);
-            ws.cell(row, 19).string(c.RECOMENDACIONES || '').style(cellStyle);
-            ws.cell(row, 20).string(c.FECHA_CONSULTA ? new Date(c.FECHA_CONSULTA).toLocaleString('es-ES') : '').style(cellStyle);
-            ws.cell(row, 21).string(c.OBSERVACIONES || '').style(cellStyle);
+            ws.cell(row, 1).number(c.id_cita || 0).style(cellCenterStyle);
+            ws.cell(row, 2).string(c.nombre_paciente || '').style(cellStyle);
+            ws.cell(row, 3).string(c.numero_documento_identidad || '').style(cellStyle);
+            ws.cell(row, 4).string(c.telefono || '').style(cellStyle);
+            ws.cell(row, 5).string(c.doctor || '').style(cellStyle);
+            ws.cell(row, 6).string(c.fecha_cita ? new Date(c.fecha_cita).toLocaleString('es-ES') : '').style(cellStyle);
+            ws.cell(row, 7).string(c.estado || '').style(cellCenterStyle);
+            ws.cell(row, 8).string(c.tipo_cita || '').style(cellCenterStyle);
+            ws.cell(row, 9).string(c.prioridad || 'NORMAL').style(cellCenterStyle);
+            ws.cell(row, 10).string(c.motivo_consulta || '').style(cellStyle);
+            ws.cell(row, 11).number(parseFloat(c.temperatura) || 0).style(cellCenterStyle);
+            ws.cell(row, 12).number(parseInt(c.presion_sistolica) || 0).style(cellCenterStyle);
+            ws.cell(row, 13).number(parseInt(c.presion_diastolica) || 0).style(cellCenterStyle);
+            ws.cell(row, 14).number(parseFloat(c.peso) || 0).style(cellCenterStyle);
+            ws.cell(row, 15).number(parseFloat(c.talla) || 0).style(cellCenterStyle);
+            ws.cell(row, 16).number(parseFloat(c.imc) || 0).style(cellCenterStyle);
+            ws.cell(row, 17).string(c.diagnostico_principal || '').style(cellStyle);
+            ws.cell(row, 18).string(c.tratamiento || '').style(cellStyle);
+            ws.cell(row, 19).string(c.recomendaciones || '').style(cellStyle);
+            ws.cell(row, 20).string(c.fecha_consulta ? new Date(c.fecha_consulta).toLocaleString('es-ES') : '').style(cellStyle);
+            ws.cell(row, 21).string(c.observaciones || '').style(cellStyle);
         });
 
-        // Ancho de columnas
         ws.column(1).setWidth(10);
         ws.column(2).setWidth(30);
         ws.column(3).setWidth(20);
@@ -642,7 +625,6 @@ router.get("/consultas", async (req, res) => {
         ws.column(20).setWidth(22);
         ws.column(21).setWidth(30);
 
-        // Agregar fila de total
         const totalRow = citas.length + 2;
         ws.cell(totalRow, 1).string('TOTAL REGISTROS:').style({
             font: { bold: true, size: 11 },
@@ -653,9 +635,6 @@ router.get("/consultas", async (req, res) => {
             alignment: { horizontal: 'center', vertical: 'center' }
         });
 
-        // ============================================================
-        // ENVIAR ARCHIVO
-        // ============================================================
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(fileName)}`);
 
@@ -664,7 +643,6 @@ router.get("/consultas", async (req, res) => {
         console.log(` Excel de consultas generado correctamente: ${citas.length} registros`);
         console.log(` Archivo: ${fileName}`);
 
-        // Registrar en bitácora
         try {
             await registrarBitacora({
                 usuario: req.user?.USUARIO || "SISTEMA",
@@ -687,23 +665,24 @@ router.get("/consultas", async (req, res) => {
         });
     }
 });
+
 // ============================================================
 // GET /excel/bitacora -> Descargar Excel de bitácora
 // ============================================================
 router.get("/bitacora", async (req, res) => {
     try {
-        console.log(" Generando Excel de bitácora...");
+        console.log("📊 Generando Excel de bitácora...");
 
-        const [registros] = await pool.query(`
+        const { rows: registros } = await pool.query(`
             SELECT 
-                DATE_FORMAT(b.FECHA_HORA, '%Y-%m-%d %H:%i:%s') AS FECHA_HORA,
-                COALESCE(u.USUARIO, 'SISTEMA') AS USUARIO,
-                b.ACCION,
-                b.MODULO,
-                b.DESCRIPCION
-            FROM TBL_MS_BITACORA b
-            LEFT JOIN TBL_MS_USUARIO u ON b.ID_USUARIO = u.ID_USUARIO
-            ORDER BY b.FECHA_HORA DESC
+                TO_CHAR(b.fecha_hora, 'YYYY-MM-DD HH24:MI:SS') AS fecha_hora,
+                COALESCE(u.usuario, 'SISTEMA') AS usuario,
+                b.accion,
+                b.modulo,
+                b.descripcion
+            FROM tbl_ms_bitacora b
+            LEFT JOIN tbl_ms_usuario u ON b.id_usuario = u.id_usuario
+            ORDER BY b.fecha_hora DESC
             LIMIT 500
         `);
 
@@ -741,11 +720,11 @@ router.get("/bitacora", async (req, res) => {
 
         registros.forEach((registro, rowIndex) => {
             const row = rowIndex + 2;
-            ws.cell(row, 1).string(registro.FECHA_HORA || '').style(cellStyle);
-            ws.cell(row, 2).string(registro.USUARIO || '').style(cellStyle);
-            ws.cell(row, 3).string(registro.ACCION || '').style(cellStyle);
-            ws.cell(row, 4).string(registro.MODULO || '').style(cellStyle);
-            ws.cell(row, 5).string(registro.DESCRIPCION || '').style(cellStyle);
+            ws.cell(row, 1).string(registro.fecha_hora || '').style(cellStyle);
+            ws.cell(row, 2).string(registro.usuario || '').style(cellStyle);
+            ws.cell(row, 3).string(registro.accion || '').style(cellStyle);
+            ws.cell(row, 4).string(registro.modulo || '').style(cellStyle);
+            ws.cell(row, 5).string(registro.descripcion || '').style(cellStyle);
         });
 
         ws.column(1).setWidth(25);
@@ -778,28 +757,28 @@ router.get("/bitacora", async (req, res) => {
 // ============================================================
 router.get("/citas", async (req, res) => {
     try {
-        console.log(" Generando Excel de citas...");
+        console.log("📊 Generando Excel de citas...");
 
         const { rows: citas } = await pool.query(`
             SELECT 
-                c.ID_CITA,
-                CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
-                p.TELEFONO AS TELEFONO_PACIENTE,
-                p.CORREO_ELECTRONICO AS CORREO_PACIENTE,
-                p.NUMERO_DOCUMENTO_IDENTIDAD AS IDENTIDAD_PACIENTE,
-                u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
-                c.FECHA_CITA,
-                c.ESTADO,
-                c.TIPO_CITA,
-                c.PRIORIDAD,
-                c.MOTIVO_CONSULTA,
-                c.DURACION_ESTIMADA_MIN,
-                c.CANAL_REGISTRO
-            FROM TBL_CITAS c
-            INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
-            INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
-            WHERE c.ESTADO IN ('PROGRAMADA','CONFIRMADA','FINALIZADA','CANCELADA','NO_ASISTIO')
-            ORDER BY c.FECHA_CITA DESC
+                c.id_cita,
+                CONCAT(p.nombres, ' ', p.apellidos) AS nombre_paciente,
+                p.telefono AS telefono_paciente,
+                p.correo_electronico AS correo_paciente,
+                p.numero_documento_identidad AS identidad_paciente,
+                u.nombre_usuario AS nombre_doctor,
+                c.fecha_cita,
+                c.estado,
+                c.tipo_cita,
+                c.prioridad,
+                c.motivo_consulta,
+                c.duracion_estimada_min,
+                c.canal_registro
+            FROM tbl_citas c
+            INNER JOIN tbl_paciente p ON c.id_paciente = p.id_paciente
+            INNER JOIN tbl_ms_usuario u ON c.id_doctor = u.id_usuario
+            WHERE c.estado IN ('PROGRAMADA','CONFIRMADA','FINALIZADA','CANCELADA','NO_ASISTIO')
+            ORDER BY c.fecha_cita DESC
             LIMIT 500
         `);
 
@@ -841,19 +820,19 @@ router.get("/citas", async (req, res) => {
 
         citas.forEach((cita, rowIndex) => {
             const row = rowIndex + 2;
-            ws.cell(row, 1).number(cita.ID_CITA).style(cellStyle);
-            ws.cell(row, 2).string(cita.NOMBRE_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 3).string(cita.TELEFONO_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 4).string(cita.CORREO_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 5).string(cita.IDENTIDAD_PACIENTE || '').style(cellStyle);
-            ws.cell(row, 6).string(cita.NOMBRE_DOCTOR || '').style(cellStyle);
-            ws.cell(row, 7).string(new Date(cita.FECHA_CITA).toLocaleString('es-ES')).style(cellStyle);
-            ws.cell(row, 8).string(cita.ESTADO || '').style(cellStyle);
-            ws.cell(row, 9).string(cita.TIPO_CITA || '').style(cellStyle);
-            ws.cell(row, 10).string(cita.PRIORIDAD || '').style(cellStyle);
-            ws.cell(row, 11).string(cita.MOTIVO_CONSULTA || '').style(cellStyle);
-            ws.cell(row, 12).number(cita.DURACION_ESTIMADA_MIN || 30).style(cellStyle);
-            ws.cell(row, 13).string(cita.CANAL_REGISTRO || '').style(cellStyle);
+            ws.cell(row, 1).number(cita.id_cita).style(cellStyle);
+            ws.cell(row, 2).string(cita.nombre_paciente || '').style(cellStyle);
+            ws.cell(row, 3).string(cita.telefono_paciente || '').style(cellStyle);
+            ws.cell(row, 4).string(cita.correo_paciente || '').style(cellStyle);
+            ws.cell(row, 5).string(cita.identidad_paciente || '').style(cellStyle);
+            ws.cell(row, 6).string(cita.nombre_doctor || '').style(cellStyle);
+            ws.cell(row, 7).string(new Date(cita.fecha_cita).toLocaleString('es-ES')).style(cellStyle);
+            ws.cell(row, 8).string(cita.estado || '').style(cellStyle);
+            ws.cell(row, 9).string(cita.tipo_cita || '').style(cellStyle);
+            ws.cell(row, 10).string(cita.prioridad || '').style(cellStyle);
+            ws.cell(row, 11).string(cita.motivo_consulta || '').style(cellStyle);
+            ws.cell(row, 12).number(cita.duracion_estimada_min || 30).style(cellStyle);
+            ws.cell(row, 13).string(cita.canal_registro || '').style(cellStyle);
         });
 
         ws.column(1).setWidth(8);
@@ -896,19 +875,19 @@ router.get("/pacientes", async (req, res) => {
     try {
         console.log("📊 Generando Excel de pacientes...");
 
-        const [pacientes] = await pool.query(`
+        const { rows: pacientes } = await pool.query(`
             SELECT 
-                NOMBRES,
-                APELLIDOS,
-                TIPO_DOCUMENTO_IDENTIDAD,
-                NUMERO_DOCUMENTO_IDENTIDAD,
-                GENERO,
-                TELEFONO,
-                CORREO_ELECTRONICO,
-                ESTADO
-            FROM TBL_PACIENTE
-            WHERE ESTADO = 'ACTIVO'
-            ORDER BY APELLIDOS, NOMBRES
+                nombres,
+                apellidos,
+                tipo_documento_identidad,
+                numero_documento_identidad,
+                genero,
+                telefono,
+                correo_electronico,
+                estado
+            FROM tbl_paciente
+            WHERE estado = 'ACTIVO'
+            ORDER BY apellidos, nombres
         `);
 
         console.log(`📋 Pacientes encontrados: ${pacientes.length}`);
@@ -947,14 +926,14 @@ router.get("/pacientes", async (req, res) => {
 
         pacientes.forEach((paciente, rowIndex) => {
             const row = rowIndex + 2;
-            ws.cell(row, 1).string(paciente.NOMBRES || '').style(cellStyle);
-            ws.cell(row, 2).string(paciente.APELLIDOS || '').style(cellStyle);
-            ws.cell(row, 3).string(paciente.TIPO_DOCUMENTO_IDENTIDAD || '').style(cellStyle);
-            ws.cell(row, 4).string(paciente.NUMERO_DOCUMENTO_IDENTIDAD || '').style(cellStyle);
-            ws.cell(row, 5).string(paciente.GENERO || '').style(cellStyle);
-            ws.cell(row, 6).string(paciente.TELEFONO || '').style(cellStyle);
-            ws.cell(row, 7).string(paciente.CORREO_ELECTRONICO || '').style(cellStyle);
-            ws.cell(row, 8).string(paciente.ESTADO || '').style(cellStyle);
+            ws.cell(row, 1).string(paciente.nombres || '').style(cellStyle);
+            ws.cell(row, 2).string(paciente.apellidos || '').style(cellStyle);
+            ws.cell(row, 3).string(paciente.tipo_documento_identidad || '').style(cellStyle);
+            ws.cell(row, 4).string(paciente.numero_documento_identidad || '').style(cellStyle);
+            ws.cell(row, 5).string(paciente.genero || '').style(cellStyle);
+            ws.cell(row, 6).string(paciente.telefono || '').style(cellStyle);
+            ws.cell(row, 7).string(paciente.correo_electronico || '').style(cellStyle);
+            ws.cell(row, 8).string(paciente.estado || '').style(cellStyle);
         });
 
         ws.column(1).setWidth(25);
@@ -1019,25 +998,25 @@ router.get("/historial/:idPaciente", async (req, res) => {
             });
         }
 
-        const [paciente] = await pool.query(`
+        const { rows: paciente } = await pool.query(`
             SELECT 
-                p.ID_PACIENTE,
-                p.NOMBRES,
-                p.APELLIDOS,
-                CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_COMPLETO,
-                p.FECHA_NACIMIENTO,
-                p.GENERO,
-                p.TELEFONO,
-                p.CORREO_ELECTRONICO,
-                p.DIRECCION,
-                p.ESTADO,
-                p.RTN_PACIENTE,
-                p.OCUPACION,
-                p.ESTADO_CIVIL,
-                p.TIPO_DOCUMENTO_IDENTIDAD,
-                p.NUMERO_DOCUMENTO_IDENTIDAD
-            FROM TBL_PACIENTE p
-            WHERE p.ID_PACIENTE = ?
+                p.id_paciente,
+                p.nombres,
+                p.apellidos,
+                CONCAT(p.nombres, ' ', p.apellidos) AS nombre_completo,
+                p.fecha_nacimiento,
+                p.genero,
+                p.telefono,
+                p.correo_electronico,
+                p.direccion,
+                p.estado,
+                p.rtn_paciente,
+                p.ocupacion,
+                p.estado_civil,
+                p.tipo_documento_identidad,
+                p.numero_documento_identidad
+            FROM tbl_paciente p
+            WHERE p.id_paciente = $1
         `, [idPaciente]);
 
         if (!paciente || paciente.length === 0) {
@@ -1049,7 +1028,7 @@ router.get("/historial/:idPaciente", async (req, res) => {
         }
 
         const p = paciente[0];
-        console.log(`✅ Paciente encontrado: ${p.NOMBRE_COMPLETO}`);
+        console.log(`✅ Paciente encontrado: ${p.nombre_completo}`);
 
         const calcularEdad = (fecha) => {
             if (!fecha) return '';
@@ -1061,81 +1040,81 @@ router.get("/historial/:idPaciente", async (req, res) => {
             return edad;
         };
 
-        const [historial] = await pool.query(`
+        const { rows: historial } = await pool.query(`
             SELECT 
-                ALERGIAS,
-                ENFERMEDADES_CRONICAS,
-                CIRUGIAS_PREVIAS,
-                MEDICAMENTOS_ACTUALES,
-                ANTECEDENTES_FAMILIARES,
-                HABITOS,
-                VACUNAS,
-                NOTAS_IMPORTANTES,
-                FECHA_ACTUALIZACION
-            FROM TBL_HISTORIAL_MEDICO
-            WHERE ID_PACIENTE = ?
+                alergias,
+                enfermedades_cronicas,
+                cirugias_previas,
+                medicamentos_actuales,
+                antecedentes_familiares,
+                habitos,
+                vacunas,
+                notas_importantes,
+                fecha_actualizacion
+            FROM tbl_historial_medico
+            WHERE id_paciente = $1
         `, [idPaciente]);
 
         const datosHistorial = historial && historial.length > 0 ? historial[0] : null;
         console.log(`📋 Historial: ${datosHistorial ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
 
-        const [consultas] = await pool.query(`
+        const { rows: consultas } = await pool.query(`
             SELECT 
-                cm.FECHA_CONSULTA,
-                cm.MOTIVO_CONSULTA,
-                cm.DIAGNOSTICO_PRINCIPAL,
-                cm.CODIGO_CIE10_PRINCIPAL,
-                cm.TRATAMIENTO,
-                cm.RECOMENDACIONES,
-                cm.TIPO_CONSULTA,
-                u.NOMBRE_USUARIO AS DOCTOR
-            FROM TBL_CONSULTA_MEDICA cm
-            LEFT JOIN TBL_MS_USUARIO u ON cm.ID_DOCTOR = u.ID_USUARIO
-            WHERE cm.ID_PACIENTE = ?
-            ORDER BY cm.FECHA_CONSULTA DESC
+                cm.fecha_consulta,
+                cm.motivo_consulta,
+                cm.diagnostico_principal,
+                cm.codigo_cie10_principal,
+                cm.tratamiento,
+                cm.recomendaciones,
+                cm.tipo_consulta,
+                u.nombre_usuario AS doctor
+            FROM tbl_consulta_medica cm
+            LEFT JOIN tbl_ms_usuario u ON cm.id_doctor = u.id_usuario
+            WHERE cm.id_paciente = $1
+            ORDER BY cm.fecha_consulta DESC
             LIMIT 20
         `, [idPaciente]);
 
         console.log(`📋 Consultas encontradas: ${consultas.length}`);
 
-        const [preclinicas] = await pool.query(`
+        const { rows: preclinicas } = await pool.query(`
             SELECT 
-                pr.FECHA_REGISTRO,
-                pr.TEMPERATURA,
-                pr.PRESION_SISTOLICA,
-                pr.PRESION_DIASTOLICA,
-                pr.FRECUENCIA_CARDIACA,
-                pr.SATURACION_OXIGENO,
-                pr.PESO,
-                pr.TALLA,
-                pr.IMC,
-                pr.GLUCOSA,
-                pr.ESTADO_GENERAL,
-                u.NOMBRE_USUARIO AS ENFERMERA
-            FROM TBL_PRECLINICA pr
-            LEFT JOIN TBL_MS_USUARIO u ON pr.ID_USUARIO_ENFERMERIA = u.ID_USUARIO
-            WHERE pr.ID_CITA IN (
-                SELECT c.ID_CITA FROM TBL_CITAS c WHERE c.ID_PACIENTE = ?
+                pr.fecha_registro,
+                pr.temperatura,
+                pr.presion_sistolica,
+                pr.presion_diastolica,
+                pr.frecuencia_cardiaca,
+                pr.saturacion_oxigeno,
+                pr.peso,
+                pr.talla,
+                pr.imc,
+                pr.glucosa,
+                pr.estado_general,
+                u.nombre_usuario AS enfermera
+            FROM tbl_preclinica pr
+            LEFT JOIN tbl_ms_usuario u ON pr.id_usuario_enfermeria = u.id_usuario
+            WHERE pr.id_cita IN (
+                SELECT c.id_cita FROM tbl_citas c WHERE c.id_paciente = $1
             )
-            ORDER BY pr.FECHA_REGISTRO DESC
+            ORDER BY pr.fecha_registro DESC
             LIMIT 20
         `, [idPaciente]);
 
         console.log(`📋 Signos vitales encontrados: ${preclinicas.length}`);
 
-        const [medicamentos] = await pool.query(`
+        const { rows: medicamentos } = await pool.query(`
             SELECT 
-                pr.FECHA_PRESCRIPCION,
-                m.NOMBRE_MEDICAMENTO,
-                pr.DOSIS,
-                pr.FRECUENCIA,
-                pr.DURACION,
-                pr.ESTADO
-            FROM TBL_PRESCRIPCION pr
-            LEFT JOIN TBL_INVENTARIO_MEDICAMENTOS m ON pr.ID_MEDICAMENTO = m.ID_MEDICAMENTO
-            LEFT JOIN TBL_CONSULTA_MEDICA cm ON pr.ID_CONSULTA = cm.ID_CONSULTA
-            WHERE cm.ID_PACIENTE = ?
-            ORDER BY pr.FECHA_PRESCRIPCION DESC
+                pr.fecha_prescripcion,
+                m.nombre_medicamento,
+                pr.dosis,
+                pr.frecuencia,
+                pr.duracion,
+                pr.estado
+            FROM tbl_prescripcion pr
+            LEFT JOIN tbl_inventario_medicamentos m ON pr.id_medicamento = m.id_medicamento
+            LEFT JOIN tbl_consulta_medica cm ON pr.id_consulta = cm.id_consulta
+            WHERE cm.id_paciente = $1
+            ORDER BY pr.fecha_prescripcion DESC
             LIMIT 20
         `, [idPaciente]);
 
@@ -1194,22 +1173,22 @@ router.get("/historial/:idPaciente", async (req, res) => {
         let row = 3;
 
         const infoPaciente = [
-            ['ID Paciente:', p.ID_PACIENTE],
-            ['Nombre Completo:', p.NOMBRE_COMPLETO || ''],
-            ['Nombres:', p.NOMBRES || ''],
-            ['Apellidos:', p.APELLIDOS || ''],
-            ['Fecha de Nacimiento:', p.FECHA_NACIMIENTO ? new Date(p.FECHA_NACIMIENTO).toLocaleDateString('es-ES') : ''],
-            ['Edad:', p.FECHA_NACIMIENTO ? `${calcularEdad(p.FECHA_NACIMIENTO)} años` : ''],
-            ['Género:', p.GENERO || ''],
-            ['Teléfono:', p.TELEFONO || ''],
-            ['Correo Electrónico:', p.CORREO_ELECTRONICO || ''],
-            ['Dirección:', p.DIRECCION || ''],
-            ['RTN:', p.RTN_PACIENTE || 'N/A'],
-            ['Ocupación:', p.OCUPACION || 'N/A'],
-            ['Estado Civil:', p.ESTADO_CIVIL || 'N/A'],
-            ['Tipo Documento:', p.TIPO_DOCUMENTO_IDENTIDAD || ''],
-            ['Número Documento:', p.NUMERO_DOCUMENTO_IDENTIDAD || ''],
-            ['Estado:', p.ESTADO || '']
+            ['ID Paciente:', p.id_paciente],
+            ['Nombre Completo:', p.nombre_completo || ''],
+            ['Nombres:', p.nombres || ''],
+            ['Apellidos:', p.apellidos || ''],
+            ['Fecha de Nacimiento:', p.fecha_nacimiento ? new Date(p.fecha_nacimiento).toLocaleDateString('es-ES') : ''],
+            ['Edad:', p.fecha_nacimiento ? `${calcularEdad(p.fecha_nacimiento)} años` : ''],
+            ['Género:', p.genero || ''],
+            ['Teléfono:', p.telefono || ''],
+            ['Correo Electrónico:', p.correo_electronico || ''],
+            ['Dirección:', p.direccion || ''],
+            ['RTN:', p.rtn_paciente || 'N/A'],
+            ['Ocupación:', p.ocupacion || 'N/A'],
+            ['Estado Civil:', p.estado_civil || 'N/A'],
+            ['Tipo Documento:', p.tipo_documento_identidad || ''],
+            ['Número Documento:', p.numero_documento_identidad || ''],
+            ['Estado:', p.estado || '']
         ];
 
         infoPaciente.forEach(([label, value]) => {
@@ -1231,26 +1210,29 @@ router.get("/historial/:idPaciente", async (req, res) => {
         const parseArray = (value) => {
             if (!value) return '';
             if (Array.isArray(value)) return value.join(', ');
-            try {
-                const parsed = JSON.parse(value);
-                if (Array.isArray(parsed)) return parsed.join(', ');
-                return value;
-            } catch {
-                return value;
+            if (typeof value === 'string') {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (Array.isArray(parsed)) return parsed.join(', ');
+                    return value;
+                } catch {
+                    return value;
+                }
             }
+            return value;
         };
 
         if (datosHistorial) {
             const camposHistorial = [
-                ['Alergias:', datosHistorial.ALERGIAS],
-                ['Enfermedades Crónicas:', datosHistorial.ENFERMEDADES_CRONICAS],
-                ['Cirugías Previas:', datosHistorial.CIRUGIAS_PREVIAS],
-                ['Medicamentos Actuales:', datosHistorial.MEDICAMENTOS_ACTUALES],
-                ['Antecedentes Familiares:', datosHistorial.ANTECEDENTES_FAMILIARES],
-                ['Hábitos:', datosHistorial.HABITOS],
-                ['Vacunas:', datosHistorial.VACUNAS],
-                ['Notas Importantes:', datosHistorial.NOTAS_IMPORTANTES],
-                ['Última Actualización:', datosHistorial.FECHA_ACTUALIZACION ? new Date(datosHistorial.FECHA_ACTUALIZACION).toLocaleString('es-ES') : '']
+                ['Alergias:', datosHistorial.alergias],
+                ['Enfermedades Crónicas:', datosHistorial.enfermedades_cronicas],
+                ['Cirugías Previas:', datosHistorial.cirugias_previas],
+                ['Medicamentos Actuales:', datosHistorial.medicamentos_actuales],
+                ['Antecedentes Familiares:', datosHistorial.antecedentes_familiares],
+                ['Hábitos:', datosHistorial.habitos],
+                ['Vacunas:', datosHistorial.vacunas],
+                ['Notas Importantes:', datosHistorial.notas_importantes],
+                ['Última Actualización:', datosHistorial.fecha_actualizacion ? new Date(datosHistorial.fecha_actualizacion).toLocaleString('es-ES') : '']
             ];
 
             camposHistorial.forEach(([label, value]) => {
@@ -1276,14 +1258,14 @@ router.get("/historial/:idPaciente", async (req, res) => {
         if (consultas && consultas.length > 0) {
             consultas.forEach((consulta, idx) => {
                 const rowIdx = idx + 2;
-                wsConsultas.cell(rowIdx, 1).string(consulta.FECHA_CONSULTA ? new Date(consulta.FECHA_CONSULTA).toLocaleDateString('es-ES') : '').style(cellCenterStyle);
-                wsConsultas.cell(rowIdx, 2).string(consulta.MOTIVO_CONSULTA || '').style(cellStyle);
-                wsConsultas.cell(rowIdx, 3).string(consulta.DIAGNOSTICO_PRINCIPAL || '').style(cellStyle);
-                wsConsultas.cell(rowIdx, 4).string(consulta.CODIGO_CIE10_PRINCIPAL || '').style(cellCenterStyle);
-                wsConsultas.cell(rowIdx, 5).string(consulta.TRATAMIENTO || '').style(cellStyle);
-                wsConsultas.cell(rowIdx, 6).string(consulta.RECOMENDACIONES || '').style(cellStyle);
-                wsConsultas.cell(rowIdx, 7).string(consulta.TIPO_CONSULTA || '').style(cellCenterStyle);
-                wsConsultas.cell(rowIdx, 8).string(consulta.DOCTOR || '').style(cellStyle);
+                wsConsultas.cell(rowIdx, 1).string(consulta.fecha_consulta ? new Date(consulta.fecha_consulta).toLocaleDateString('es-ES') : '').style(cellCenterStyle);
+                wsConsultas.cell(rowIdx, 2).string(consulta.motivo_consulta || '').style(cellStyle);
+                wsConsultas.cell(rowIdx, 3).string(consulta.diagnostico_principal || '').style(cellStyle);
+                wsConsultas.cell(rowIdx, 4).string(consulta.codigo_cie10_principal || '').style(cellCenterStyle);
+                wsConsultas.cell(rowIdx, 5).string(consulta.tratamiento || '').style(cellStyle);
+                wsConsultas.cell(rowIdx, 6).string(consulta.recomendaciones || '').style(cellStyle);
+                wsConsultas.cell(rowIdx, 7).string(consulta.tipo_consulta || '').style(cellCenterStyle);
+                wsConsultas.cell(rowIdx, 8).string(consulta.doctor || '').style(cellStyle);
             });
         } else {
             wsConsultas.cell(2, 1).string('No hay consultas médicas registradas.').style(cellStyle);
@@ -1309,18 +1291,18 @@ router.get("/historial/:idPaciente", async (req, res) => {
         if (preclinicas && preclinicas.length > 0) {
             preclinicas.forEach((pre, idx) => {
                 const rowIdx = idx + 2;
-                wsPre.cell(rowIdx, 1).string(pre.FECHA_REGISTRO ? new Date(pre.FECHA_REGISTRO).toLocaleDateString('es-ES') : '').style(cellCenterStyle);
-                wsPre.cell(rowIdx, 2).number(parseFloat(pre.TEMPERATURA) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 3).number(parseFloat(pre.PRESION_SISTOLICA) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 4).number(parseFloat(pre.PRESION_DIASTOLICA) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 5).number(parseFloat(pre.FRECUENCIA_CARDIACA) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 6).number(parseFloat(pre.SATURACION_OXIGENO) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 7).number(parseFloat(pre.PESO) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 8).number(parseFloat(pre.TALLA) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 9).number(parseFloat(pre.IMC) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 10).number(parseFloat(pre.GLUCOSA) || 0).style(cellCenterStyle);
-                wsPre.cell(rowIdx, 11).string(pre.ESTADO_GENERAL || '').style(cellStyle);
-                wsPre.cell(rowIdx, 12).string(pre.ENFERMERA || '').style(cellStyle);
+                wsPre.cell(rowIdx, 1).string(pre.fecha_registro ? new Date(pre.fecha_registro).toLocaleDateString('es-ES') : '').style(cellCenterStyle);
+                wsPre.cell(rowIdx, 2).number(parseFloat(pre.temperatura) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 3).number(parseFloat(pre.presion_sistolica) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 4).number(parseFloat(pre.presion_diastolica) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 5).number(parseFloat(pre.frecuencia_cardiaca) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 6).number(parseFloat(pre.saturacion_oxigeno) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 7).number(parseFloat(pre.peso) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 8).number(parseFloat(pre.talla) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 9).number(parseFloat(pre.imc) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 10).number(parseFloat(pre.glucosa) || 0).style(cellCenterStyle);
+                wsPre.cell(rowIdx, 11).string(pre.estado_general || '').style(cellStyle);
+                wsPre.cell(rowIdx, 12).string(pre.enfermera || '').style(cellStyle);
             });
         } else {
             wsPre.cell(2, 1).string('No hay registros de signos vitales.').style(cellStyle);
@@ -1350,12 +1332,12 @@ router.get("/historial/:idPaciente", async (req, res) => {
         if (medicamentos && medicamentos.length > 0) {
             medicamentos.forEach((med, idx) => {
                 const rowIdx = idx + 2;
-                wsMed.cell(rowIdx, 1).string(med.FECHA_PRESCRIPCION ? new Date(med.FECHA_PRESCRIPCION).toLocaleDateString('es-ES') : '').style(cellCenterStyle);
-                wsMed.cell(rowIdx, 2).string(med.NOMBRE_MEDICAMENTO || '').style(cellStyle);
-                wsMed.cell(rowIdx, 3).string(med.DOSIS || '').style(cellCenterStyle);
-                wsMed.cell(rowIdx, 4).string(med.FRECUENCIA || '').style(cellCenterStyle);
-                wsMed.cell(rowIdx, 5).string(med.DURACION || '').style(cellCenterStyle);
-                wsMed.cell(rowIdx, 6).string(med.ESTADO || '').style(cellCenterStyle);
+                wsMed.cell(rowIdx, 1).string(med.fecha_prescripcion ? new Date(med.fecha_prescripcion).toLocaleDateString('es-ES') : '').style(cellCenterStyle);
+                wsMed.cell(rowIdx, 2).string(med.nombre_medicamento || '').style(cellStyle);
+                wsMed.cell(rowIdx, 3).string(med.dosis || '').style(cellCenterStyle);
+                wsMed.cell(rowIdx, 4).string(med.frecuencia || '').style(cellCenterStyle);
+                wsMed.cell(rowIdx, 5).string(med.duracion || '').style(cellCenterStyle);
+                wsMed.cell(rowIdx, 6).string(med.estado || '').style(cellCenterStyle);
             });
         } else {
             wsMed.cell(2, 1).string('No hay medicamentos prescritos.').style(cellStyle);
@@ -1370,7 +1352,7 @@ router.get("/historial/:idPaciente", async (req, res) => {
 
         // GENERAR Y ENVIAR
         const fechaActual7 = new Date().toISOString().split('T')[0];
-        const nombreArchivo = `Historial_${p.NOMBRE_COMPLETO.replace(/\s/g, '_')}_${fechaActual7}.xlsx`;
+        const nombreArchivo = `Historial_${p.nombre_completo.replace(/\s/g, '_')}_${fechaActual7}.xlsx`;
 
         console.log(`📊 Enviando archivo: ${nombreArchivo}`);
 
