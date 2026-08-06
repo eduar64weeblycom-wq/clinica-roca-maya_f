@@ -10,13 +10,16 @@ const verificarSesion = async (req, res, next) => {
   
   try {
     // 🔍 Obtener estado del usuario y estado del rol usando comillas dobles para PostgreSQL
-    const [rows] = await pool.query(`
-      SELECT u."ESTADO" AS "ESTADO_USUARIO", r."ESTADO" AS "ESTADO_ROL"
-      FROM "TBL_MS_USUARIO" u
-      INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
-      WHERE u."USUARIO" = $1
-    `, [usuario]);
-    
+    const resultado = await pool.query(
+      `SELECT u."ESTADO" AS "ESTADO_USUARIO", r."ESTADO" AS "ESTADO_ROL"
+       FROM "TBL_MS_USUARIO" u
+       INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
+       WHERE u."USUARIO" = $1`,
+      [usuario]
+    );
+
+    const rows = resultado.rows; // 👈 Extraemos .rows correctamente aquí arriba
+
     if (rows.length === 0) {
       res.clearCookie("user");
       return res.redirect("/auth/login?error=Usuario no existe");
@@ -47,13 +50,14 @@ const verificarSesion = async (req, res, next) => {
 // Función para obtener el rol del usuario
 const obtenerRolUsuario = async (usuario) => {
   try {
-    const [rows] = await pool.query(`
+    const resultado = await pool.query(`
       SELECT r."ROL"
       FROM "TBL_MS_USUARIO" u
       INNER JOIN "TBL_MS_ROLES" r ON u."ID_ROL" = r."ID_ROL"
       WHERE u."USUARIO" = $1
     `, [usuario]);
     
+    const rows = resultado.rows; // 👈 Extraemos .rows correctamente también aquí
     return rows.length > 0 ? rows[0].ROL : null;
   } catch (error) {
     console.error("Error obteniendo rol:", error);

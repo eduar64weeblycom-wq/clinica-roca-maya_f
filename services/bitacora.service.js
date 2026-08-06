@@ -20,7 +20,7 @@ async function registrarBitacora({
         `SELECT "ID_USUARIO" FROM "TBL_MS_USUARIO" WHERE "USUARIO" = $1`,
         [usuario]
       );
-      const rows = resultado.rows; // 👈 Extraemos .rows correctamente
+      const rows = resultado.rows;
       if (rows.length) idUsuario = rows[0].ID_USUARIO;
     } else if (typeof usuario === "number") {
       idUsuario = usuario;
@@ -31,7 +31,7 @@ async function registrarBitacora({
       const resultadoSys = await pool.query(
         `SELECT "ID_USUARIO" FROM "TBL_MS_USUARIO" WHERE "USUARIO" = 'ADMIN'`
       );
-      const sys = resultadoSys.rows; // 👈 Extraemos .rows correctamente
+      const sys = resultadoSys.rows;
       idUsuario = sys && sys.length ? sys[0].ID_USUARIO : 1;
     }
 
@@ -46,9 +46,12 @@ async function registrarBitacora({
       ? req.get("User-Agent") || "Desconocido"
       : "Sistema";
 
-    // Registrar en la bitácora usando la sintaxis correcta de parámetros posicionales ($1, $2...) para PostgreSQL
+    // Inserción directa en la tabla de bitácora para evitar conflictos de tipos con el procedimiento almacenado
     await pool.query(
-      `CALL SP_REGISTRAR_BITACORA($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO "TBL_MS_BITACORA" (
+        "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", "ID_REGISTRO", 
+        "TABLA", "IP_CLIENTE", "USER_AGENT", "ESTADO", "DETALLE_ERROR", "ORIGEN", "FECHA"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
       [
         idUsuario,
         accion,
