@@ -7,7 +7,7 @@ async function registrarBitacora({
   modulo = "AUTENTICACIÓN",
   idRegistro = null,
   tabla = null,
-  estado = "ÉXITO",
+  estado = "EXITO",
   detalleError = null,
   req = null,
 }) {
@@ -46,22 +46,24 @@ async function registrarBitacora({
       ? req.get("User-Agent") || "Desconocido"
       : "Sistema";
 
-    // Inserción directa corregida sin ID_REGISTRO ni TABLA
+    // Inserción adaptada a las columnas reales de TBL_MS_BITACORA
     await pool.query(
       `INSERT INTO "TBL_MS_BITACORA" (
         "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", 
-        "IP_CLIENTE", "USER_AGENT", "ESTADO", "DETALLE_ERROR", "ORIGEN", "FECHA"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+        "ID_REGISTRO_AFECTADO", "TABLA_AFECTADA", 
+        "IP_CLIENTE", "USER_AGENT", "ESTADO_OPERACION", "DETALLE_ERROR", "FECHA_HORA"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
       [
         idUsuario,
         accion,
         descripcion,
         modulo,
+        idRegistro,
+        tabla,
         ipCliente,
         userAgent,
         estado,
         detalleError,
-        "SISTEMA_WEB",
       ]
     );
   } catch (err) {
