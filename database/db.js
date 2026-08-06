@@ -2,6 +2,7 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || undefined,
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -10,6 +11,7 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false // Necesario para conexiones remotas seguras como Supabase
   },
+  family: 4, // ⚠️ ESTA LÍNEA ES CLAVE: Fuerza IPv4 y evita el error ECONNREFUSED en Render
   max: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
 });
 
