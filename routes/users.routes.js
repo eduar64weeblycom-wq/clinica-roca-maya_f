@@ -2,33 +2,34 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../database/db');
 const { registrarBitacora } = require('../services/bitacora.service');
+const xl = require('excel4node'); // Asegúrate de tenerlo requerido si usas exportación Excel
 
 // ============================================================
 // RUTA PRINCIPAL - Mostrar vista de usuarios
 // ============================================================
 router.get("/", async (req, res) => {
   try {
-    const [usuarios] = await pool.query(`
+    const { rows: usuarios } = await pool.query(`
       SELECT 
-        u.ID_USUARIO,
-        u.USUARIO,
-        u.NOMBRE_USUARIO,
-        u.ESTADO,
-        u.CORREO_ELECTRONICO,
-        u.ACTIVO_2FA,
-        u.FECHA_ULTIMA_CONEXION,
-        r.ROL AS NOMBRE_ROL,
-        r.ID_ROL
-      FROM TBL_MS_USUARIO u
-      INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-      ORDER BY u.ID_USUARIO
+        u.id_usuario AS "ID_USUARIO",
+        u.usuario AS "USUARIO",
+        u.nombre_usuario AS "NOMBRE_USUARIO",
+        u.estado AS "ESTADO",
+        u.correo_electronico AS "CORREO_ELECTRONICO",
+        u.activo_2fa AS "ACTIVO_2FA",
+        u.fecha_ultima_conexion AS "FECHA_ULTIMA_CONEXION",
+        r.rol AS "NOMBRE_ROL",
+        r.id_rol AS "ID_ROL"
+      FROM tbl_ms_usuario u
+      INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol
+      ORDER BY u.id_usuario
     `);
 
-    // Obtener todos los roles (sin filtro de ESTADO)
-    const [roles] = await pool.query(
-      `SELECT ID_ROL, ROL, DESCRIPCION 
-       FROM TBL_MS_ROLES 
-       ORDER BY ID_ROL`
+    // Obtener todos los roles
+    const { rows: roles } = await pool.query(
+      `SELECT id_rol AS "ID_ROL", rol AS "ROL", descripcion AS "DESCRIPCION" 
+       FROM tbl_ms_roles 
+       ORDER BY id_rol`
     );
 
     res.render("users", { 
@@ -41,16 +42,17 @@ router.get("/", async (req, res) => {
     res.status(500).send("Error al cargar usuarios");
   }
 });
+
 // ============================================================
 // API: Obtener todas las especialidades activas
 // ============================================================
 router.get("/api/especialidades", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT ID_ESPECIALIDAD, NOMBRE_ESPECIALIDAD 
-       FROM TBL_ESPECIALIDADES 
-       WHERE ESTADO = 'ACTIVA' 
-       ORDER BY NOMBRE_ESPECIALIDAD`
+    const { rows } = await pool.query(
+      `SELECT id_especialidad AS "ID_ESPECIALIDAD", nombre_especialidad AS "NOMBRE_ESPECIALIDAD" 
+       FROM tbl_especialidades 
+       WHERE estado = 'ACTIVA' 
+       ORDER BY nombre_especialidad`
     );
     res.json({ ok: true, especialidades: rows });
   } catch (error) {
@@ -65,11 +67,11 @@ router.get("/api/especialidades", async (req, res) => {
 router.get("/api/usuario/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const [rows] = await pool.query(
-      `SELECT u.*, r.ROL 
-       FROM TBL_MS_USUARIO u 
-       INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL 
-       WHERE u.ID_USUARIO = ?`,
+    const { rows } = await pool.query(
+      `SELECT u.*, r.rol AS "ROL" 
+       FROM tbl_ms_usuario u 
+       INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol 
+       WHERE u.id_usuario = $1`,
       [id]
     );
     if (rows.length === 0) {
@@ -77,13 +79,14 @@ router.get("/api/usuario/:id", async (req, res) => {
     }
     const usuario = rows[0];
     let especialidades = [];
-    // Si es doctor (ID_ROL = 2 según tu base de datos)
-    if (usuario.ID_ROL === 2) {
-      const [espRows] = await pool.query(
-        `SELECT ID_ESPECIALIDAD FROM TBL_DOCTOR_ESPECIALIDAD WHERE ID_DOCTOR = ?`,
+    
+    // Si es doctor (ID_ROL = 2)
+    if (usuario.id_rol === 2 || usuario.ID_ROL === 2) {
+      const { rows: espRows } = await pool.query(
+        `SELECT id_especialidad FROM tbl_doctor_especialidad WHERE id_doctor = $1`,
         [id]
       );
-      especialidades = espRows.map(row => row.ID_ESPECIALIDAD);
+      especialidades = espRows.map(row => row.id_especialidad || row.ID_ESPECIALIDAD);
     }
     res.json({ ok: true, usuario, especialidades });
   } catch (error) {
@@ -105,25 +108,24 @@ router.post("/api/update", async (req, res) => {
       estado,
       activo_2fa,
       usuarioAccion,
-      especialidades // array de IDs de especialidades
+      especialidades
     } = req.body;
 
-    // Validar campos obligatorios
     if (!id || !usuario || !nombre_usuario || !id_rol || !estado) {
       return res.status(400).json({ ok: false, msg: "Faltan campos obligatorios" });
     }
 
     // Actualizar datos básicos del usuario
     await pool.query(
-      `UPDATE TBL_MS_USUARIO SET 
-        USUARIO = ?, 
-        NOMBRE_USUARIO = ?, 
-        ID_ROL = ?, 
-        ESTADO = ?, 
-        ACTIVO_2FA = ?, 
-        FECHA_MODIFICACION = CURRENT_TIMESTAMP, 
-        USUARIO_MODIFICACION = ? 
-      WHERE ID_USUARIO = ?`,
+      `UPDATE tbl_ms_usuario SET 
+        usuario = $1, 
+        nombre_usuario = $2, 
+        id_rol = $3, 
+        estado = $4, 
+        activo_2fa = $5, 
+        fecha_modificacion = CURRENT_TIMESTAMP, 
+        usuario_modificacion = $6 
+      WHERE id_usuario = $7`,
       [usuario, nombre_usuario, id_rol, estado, activo_2fa || 0, usuarioAccion || 'SISTEMA', id]
     );
 
@@ -131,27 +133,25 @@ router.post("/api/update", async (req, res) => {
     // GESTIÓN DE ESPECIALIDADES (SOLO PARA DOCTORES)
     // ============================================================
     if (parseInt(id_rol) === 2) {
-      // Eliminar especialidades existentes
-      await pool.query(`DELETE FROM TBL_DOCTOR_ESPECIALIDAD WHERE ID_DOCTOR = ?`, [id]);
+      await pool.query(`DELETE FROM tbl_doctor_especialidad WHERE id_doctor = $1`, [id]);
       
-      // Insertar nuevas especialidades si hay
       if (especialidades && especialidades.length > 0) {
-        const values = especialidades.map(espId => [parseInt(id), parseInt(espId)]);
-        await pool.query(
-          `INSERT INTO TBL_DOCTOR_ESPECIALIDAD (ID_DOCTOR, ID_ESPECIALIDAD) VALUES ?`,
-          [values]
-        );
+        for (const espId of especialidades) {
+          await pool.query(
+            `INSERT INTO tbl_doctor_especialidad (id_doctor, id_especialidad) VALUES ($1, $2)`,
+            [parseInt(id), parseInt(espId)]
+          );
+        }
       }
     }
 
-    // Registrar en bitácora
     await registrarBitacora({
       usuario: usuarioAccion || 'SISTEMA',
       accion: "ACTUALIZACION_USUARIO",
       descripcion: `Usuario ${usuario} actualizado. Rol: ${id_rol}. Especialidades: ${especialidades ? especialidades.join(', ') : 'Ninguna'}`,
       modulo: "USUARIOS",
       idRegistro: id,
-      tabla: "TBL_MS_USUARIO",
+      tabla: "tbl_ms_usuario",
       estado: "EXITO",
       req
     });
@@ -175,7 +175,7 @@ router.post("/api/cambiar-estado", async (req, res) => {
     }
 
     await pool.query(
-      `UPDATE TBL_MS_USUARIO SET ESTADO = ?, FECHA_MODIFICACION = CURRENT_TIMESTAMP, USUARIO_MODIFICACION = ? WHERE ID_USUARIO = ?`,
+      `UPDATE tbl_ms_usuario SET estado = $1, fecha_modificacion = CURRENT_TIMESTAMP, usuario_modificacion = $2 WHERE id_usuario = $3`,
       [estado, usuarioAccion || 'SISTEMA', id]
     );
 
@@ -185,7 +185,7 @@ router.post("/api/cambiar-estado", async (req, res) => {
       descripcion: `Usuario ID ${id} cambió a estado: ${estado}`,
       modulo: "USUARIOS",
       idRegistro: id,
-      tabla: "TBL_MS_USUARIO",
+      tabla: "tbl_ms_usuario",
       estado: "EXITO",
       req
     });
@@ -202,29 +202,22 @@ router.post("/api/cambiar-estado", async (req, res) => {
 // ============================================================
 router.get("/usuarios", async (req, res) => {
   try {
-    console.log("📊 Generando Excel de usuarios...");
-
-    const [usuarios] = await pool.query(`
+    const { rows: usuarios } = await pool.query(`
       SELECT 
-        u.USUARIO,
-        u.NOMBRE_USUARIO,
-        r.ROL AS ROL,
-        u.ESTADO,
-        u.CORREO_ELECTRONICO,
-        CASE WHEN u.ACTIVO_2FA = 1 THEN 'Sí' ELSE 'No' END AS ACTIVO_2FA,
-        u.FECHA_ULTIMA_CONEXION
-      FROM TBL_MS_USUARIO u
-      INNER JOIN TBL_MS_ROLES r ON u.ID_ROL = r.ID_ROL
-      ORDER BY u.ID_USUARIO
+        u.usuario,
+        u.nombre_usuario,
+        r.rol AS rol,
+        u.estado,
+        u.correo_electronico,
+        CASE WHEN u.activo_2fa = 1 THEN 'Sí' ELSE 'No' END AS activo_2fa,
+        u.fecha_ultima_conexion
+      FROM tbl_ms_usuario u
+      INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol
+      ORDER BY u.id_usuario
     `);
 
-    console.log(`📋 Usuarios encontrados: ${usuarios.length}`);
-
     if (!usuarios || usuarios.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No hay usuarios para exportar"
-      });
+      return res.status(404).json({ success: false, message: "No hay usuarios para exportar" });
     }
 
     const wb = new xl.Workbook();
@@ -247,20 +240,19 @@ router.get("/usuarios", async (req, res) => {
     });
 
     const headers = ['Usuario', 'Nombre', 'Rol', 'Estado', 'Correo', '2FA Activado', 'Última Conexión'];
-    
     headers.forEach((header, index) => {
       ws.cell(1, index + 1).string(header).style(headerStyle);
     });
 
     usuarios.forEach((usuario, rowIndex) => {
       const row = rowIndex + 2;
-      ws.cell(row, 1).string(usuario.USUARIO || '').style(cellStyle);
-      ws.cell(row, 2).string(usuario.NOMBRE_USUARIO || '').style(cellStyle);
-      ws.cell(row, 3).string(usuario.ROL || '').style(cellStyle);
-      ws.cell(row, 4).string(usuario.ESTADO || '').style(cellStyle);
-      ws.cell(row, 5).string(usuario.CORREO_ELECTRONICO || '').style(cellStyle);
-      ws.cell(row, 6).string(usuario.ACTIVO_2FA || 'No').style(cellStyle);
-      ws.cell(row, 7).string(usuario.FECHA_ULTIMA_CONEXION ? new Date(usuario.FECHA_ULTIMA_CONEXION).toLocaleString() : 'Nunca').style(cellStyle);
+      ws.cell(row, 1).string(usuario.usuario || '').style(cellStyle);
+      ws.cell(row, 2).string(usuario.nombre_usuario || '').style(cellStyle);
+      ws.cell(row, 3).string(usuario.rol || '').style(cellStyle);
+      ws.cell(row, 4).string(usuario.estado || '').style(cellStyle);
+      ws.cell(row, 5).string(usuario.correo_electronico || '').style(cellStyle);
+      ws.cell(row, 6).string(usuario.activo_2fa || 'No').style(cellStyle);
+      ws.cell(row, 7).string(usuario.fecha_ultima_conexion ? new Date(usuario.fecha_ultima_conexion).toLocaleString() : 'Nunca').style(cellStyle);
     });
 
     ws.column(1).setWidth(20);
@@ -279,15 +271,13 @@ router.get("/usuarios", async (req, res) => {
 
     wb.write(fileName, res);
 
-    console.log(`✅ Excel de usuarios generado correctamente: ${usuarios.length} usuarios`);
-
     try {
       await registrarBitacora({
         usuario: req.user?.nombre || "SISTEMA",
         accion: "EXPORTAR_EXCEL_USUARIOS",
         descripcion: `Exportados ${usuarios.length} usuarios a Excel`,
         modulo: "USUARIOS",
-        tabla: "TBL_MS_USUARIO",
+        tabla: "tbl_ms_usuario",
         estado: "EXITO",
         req
       });
@@ -297,10 +287,7 @@ router.get("/usuarios", async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error exportando Excel de usuarios:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al generar el archivo Excel: " + error.message
-    });
+    res.status(500).json({ success: false, message: "Error al generar el archivo Excel: " + error.message });
   }
 });
 
@@ -314,10 +301,10 @@ router.post("/api/delete", async (req, res) => {
       return res.status(400).json({ ok: false, msg: "ID de usuario requerido" });
     }
 
-    const [user] = await pool.query(`SELECT USUARIO FROM TBL_MS_USUARIO WHERE ID_USUARIO = ?`, [id]);
-    const nombreUsuario = user.length ? user[0].USUARIO : 'Desconocido';
+    const { rows: user } = await pool.query(`SELECT usuario FROM tbl_ms_usuario WHERE id_usuario = $1`, [id]);
+    const nombreUsuario = user.length ? user[0].usuario : 'Desconocido';
 
-    await pool.query(`DELETE FROM TBL_MS_USUARIO WHERE ID_USUARIO = ?`, [id]);
+    await pool.query(`DELETE FROM tbl_ms_usuario WHERE id_usuario = $1`, [id]);
 
     await registrarBitacora({
       usuario: usuarioAccion || 'SISTEMA',
@@ -325,7 +312,7 @@ router.post("/api/delete", async (req, res) => {
       descripcion: `Usuario ${nombreUsuario} (ID ${id}) eliminado permanentemente`,
       modulo: "USUARIOS",
       idRegistro: id,
-      tabla: "TBL_MS_USUARIO",
+      tabla: "tbl_ms_usuario",
       estado: "EXITO",
       req
     });

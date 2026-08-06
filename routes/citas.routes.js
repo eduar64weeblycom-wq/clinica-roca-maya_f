@@ -539,44 +539,44 @@ router.get("/", async (req, res) => {
 
 router.get("/api/datos", async (req, res) => {
   try {
-    const columnaEspecialidad =
-      await obtenerColumnaEspecialidadCita();
+    const columnaEspecialidad = await obtenerColumnaEspecialidadCita();
 
     const selectEspecialidad = columnaEspecialidad
-      ? `c.\`${columnaEspecialidad}\` AS ID_ESPECIALIDAD_CITA_DB,`
+      ? `c."${columnaEspecialidad}" AS ID_ESPECIALIDAD_CITA_DB,`
       : "NULL AS ID_ESPECIALIDAD_CITA_DB,";
 
-    const [citasRows] = await pool.query(`
+    // Consulta adaptada a PostgreSQL
+    const { rows: citasRows } = await pool.query(`
       SELECT
-        c.ID_CITA,
-        c.ID_PACIENTE,
+        c.id_cita AS ID_CITA,
+        c.id_paciente AS ID_PACIENTE,
         CONCAT(
-          p.NOMBRES,
+          p.nombres,
           ' ',
-          p.APELLIDOS
+          p.apellidos
         ) AS NOMBRE_PACIENTE,
-        p.TELEFONO AS TELEFONO_PACIENTE,
-        p.CORREO_ELECTRONICO AS CORREO_PACIENTE,
-        p.NUMERO_DOCUMENTO_IDENTIDAD AS IDENTIDAD_PACIENTE,
-        d.ID_USUARIO AS ID_DOCTOR,
-        d.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
-        d.CORREO_ELECTRONICO AS CORREO_DOCTOR,
+        p.telefono AS TELEFONO_PACIENTE,
+        p.correo_electronico AS CORREO_PACIENTE,
+        p.numero_documento_identidad AS IDENTIDAD_PACIENTE,
+        d.id_usuario AS ID_DOCTOR,
+        d.nombre_usuario AS NOMBRE_DOCTOR,
+        d.correo_electronico AS CORREO_DOCTOR,
         ${selectEspecialidad}
-        c.FECHA_CITA,
-        DATE_FORMAT(c.FECHA_CITA, '%H:%i') AS HORA_CITA,
-        c.ESTADO,
-        COALESCE(c.TIPO_CITA, 'PRIMERA_VEZ') AS TIPO_CITA,
-        COALESCE(c.PRIORIDAD, 'NORMAL') AS PRIORIDAD,
-        COALESCE(c.MOTIVO_CONSULTA, '') AS MOTIVO_CONSULTA,
-        c.DURACION_ESTIMADA_MIN,
-        c.FECHA_FIN_ESTIMADA,
-        c.CANAL_REGISTRO
-      FROM TBL_CITAS c
-      INNER JOIN TBL_PACIENTE p
-        ON c.ID_PACIENTE = p.ID_PACIENTE
-      INNER JOIN TBL_MS_USUARIO d
-        ON c.ID_DOCTOR = d.ID_USUARIO
-      WHERE c.ESTADO IN (
+        c.fecha_cita AS FECHA_CITA,
+        TO_CHAR(c.fecha_cita, 'HH24:MI') AS HORA_CITA,
+        c.estado AS ESTADO,
+        COALESCE(c.tipo_cita, 'PRIMERA_VEZ') AS TIPO_CITA,
+        COALESCE(c.prioridad, 'NORMAL') AS PRIORIDAD,
+        COALESCE(c.motivo_consulta, '') AS MOTIVO_CONSULTA,
+        c.duracion_estimada_min AS DURACION_ESTIMADA_MIN,
+        c.fecha_fin_estimada AS FECHA_FIN_ESTIMADA,
+        c.canal_registro AS CANAL_REGISTRO
+      FROM tbl_citas c
+      INNER JOIN tbl_paciente p
+        ON c.id_paciente = p.id_paciente
+      INNER JOIN tbl_ms_usuario d
+        ON c.id_doctor = d.id_usuario
+      WHERE c.estado IN (
         'PROGRAMADA',
         'CONFIRMADA',
         'PRECLINICA',
@@ -586,19 +586,20 @@ router.get("/api/datos", async (req, res) => {
         'NO_ASISTIO'
       )
       ORDER BY
-        FIELD(
-          c.ESTADO,
-          'CONSULTA_MEDICA',
-          'PRECLINICA',
-          'CONFIRMADA',
-          'PROGRAMADA',
-          'FINALIZADA',
-          'NO_ASISTIO',
-          'CANCELADA'
-        ),
-        c.FECHA_CITA DESC
+        CASE c.estado
+          WHEN 'CONSULTA_MEDICA' THEN 1
+          WHEN 'PRECLINICA' THEN 2
+          WHEN 'CONFIRMADA' THEN 3
+          WHEN 'PROGRAMADA' THEN 4
+          WHEN 'FINALIZADA' THEN 5
+          WHEN 'NO_ASISTIO' THEN 6
+          WHEN 'CANCELADA' THEN 7
+          ELSE 8
+        END,
+        c.fecha_cita DESC
     `);
 
+    // ... resto de tu lógica ...
     const mapaFallback = columnaEspecialidad
       ? {}
       : await leerMapaEspecialidades();
