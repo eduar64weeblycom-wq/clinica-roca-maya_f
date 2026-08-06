@@ -155,17 +155,17 @@ router.post('/cambiar-password', async (req, res) => {
       WHERE "ID_USUARIO" = $4
     `, [newHashedPassword, nuevoEstado, usuario, userId]);
 
+    // Bitácora corregida sin ID_REGISTRO
     await db.query(`
       INSERT INTO "TBL_MS_BITACORA" (
-        "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", "ID_REGISTRO", 
+        "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", 
         "TABLA", "IP_CLIENTE", "USER_AGENT", "ESTADO", "DETALLE_ERROR", "ORIGEN", "FECHA"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
     `, [
       userId,
       'CAMBIO_CONTRASENA',
       `Usuario ${usuario} cambió su contraseña${estadoActual === 'NUEVO' ? ' (primer ingreso)' : ''}`,
       'SEGURIDAD',
-      userId,
       'TBL_MS_USUARIO',
       req.ip || null,
       req.headers['user-agent'] || null,
