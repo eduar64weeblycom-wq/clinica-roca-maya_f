@@ -265,9 +265,9 @@
             `;
 
             if (accionesPermitidas) {
-                html += `<button class="ctbtn-accion" data-action="abrirConsulta" data-id="${c.ID_CITA}"><i class="fas fa-user-md"></i> ${hasConsulta ? 'Ver' : 'Abrir'}</button>`;
+                html += `<button class="ctbtn-accion" data-action="abrirConsulta" data-id="${c.ID_CITA}" type="button"><i class="fas fa-user-md"></i> ${hasConsulta ? 'Ver' : 'Abrir'}</button>`;
                 if (hasConsulta) {
-                    html += `<button class="ctbtn-accion edit" data-action="editarConsulta" data-id="${c.ID_CITA}"><i class="fas fa-edit"></i> Editar</button>`;
+                    html += `<button class="ctbtn-accion edit" data-action="editarConsulta" data-id="${c.ID_CITA}" type="button"><i class="fas fa-edit"></i> Editar</button>`;
                 }
             } else {
                 html += `<span class="text-muted">Sin acciones</span>`;
@@ -301,7 +301,10 @@
     // ============================================================
     window.abrirModalConsulta = function(idCita = null) {
         const modal = $("modalConsulta");
-        if (!modal) return;
+        if (!modal) {
+            console.error("No se encontró el elemento con ID 'modalConsulta' en el HTML.");
+            return;
+        }
         modal.style.display = "flex";
         modal.setAttribute("aria-hidden", "false");
         setTimeout(resetearEstilosBotonesModal, 50);
@@ -374,17 +377,24 @@
     }
 
     // ============================================================
-    // DELEGACIÓN GLOBAL DE EVENTOS
+    // DELEGACIÓN GLOBAL DE EVENTOS (MEJORADA)
     // ============================================================
     document.addEventListener('click', (e) => {
+        // Capturar elementos con data-action de manera segura (incluso iconos dentro del botón)
         const btnAccion = e.target.closest('[data-action]');
-        if (!btnAccion) return;
+        if (btnAccion) {
+            const action = btnAccion.dataset.action;
+            const idCita = btnAccion.dataset.id;
 
-        const action = btnAccion.dataset.action;
-        const idCita = btnAccion.dataset.id;
+            if (action === 'abrirConsulta' || action === 'editarConsulta') {
+                window.abrirModalConsulta(idCita);
+                return;
+            }
+        }
 
-        if (action === 'abrirConsulta' || action === 'editarConsulta') {
-            window.abrirModalConsulta(idCita);
+        // Capturar botón de cierre explícito por ID
+        if (e.target.closest('#btnCancelarConsulta')) {
+            window.cerrarModalConsulta();
         }
     });
 
@@ -392,6 +402,11 @@
         cargarDatosIniciales();
         
         const btnCerrar = document.getElementById('btnCancelarConsulta');
-        if (btnCerrar) btnCerrar.addEventListener('click', window.cerrarModalConsulta);
+        if (btnCerrar) {
+            btnCerrar.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                window.cerrarModalConsulta();
+            });
+        }
     });
 })();
