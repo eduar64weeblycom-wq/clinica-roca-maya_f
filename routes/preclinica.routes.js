@@ -95,8 +95,7 @@ function construirSignosJson({ signosVitalesJson, datos, enviarAConsulta }) {
 }
 
 // ============================================================
-// GET /preclinica
-// Mostrar vista principal
+// GET /preclinica - Mostrar vista principal
 // ============================================================
 router.get("/", async (req, res) => {
   try {
@@ -117,47 +116,46 @@ router.get("/", async (req, res) => {
 });
 
 // ============================================================
-// GET /preclinica/api/datos
-// Obtener citas y preclínicas
+// GET /preclinica/api/datos - Obtener citas y preclínicas
 // ============================================================
 router.get("/api/datos", async (req, res) => {
   try {
     const { rows: citas } = await pool.query(`
       SELECT
-        c.ID_CITA,
-        c.ID_DOCTOR,
-        CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
-        p.TELEFONO,
-        p.CORREO_ELECTRONICO,
-        u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
-        c.FECHA_CITA,
-        c.ESTADO
-      FROM TBL_CITAS c
-      INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
-      LEFT JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
-      WHERE c.ESTADO IN ('PRECLINICA', 'CONSULTA_MEDICA', 'CANCELADA', 'NO_ASISTIO')
-      ORDER BY c.FECHA_CITA DESC
+        c.id_cita AS "ID_CITA",
+        c.id_doctor AS "ID_DOCTOR",
+        CONCAT(p.nombres, ' ', p.apellidos) AS "NOMBRE_PACIENTE",
+        p.telefono AS "TELEFONO",
+        p.correo_electronico AS "CORREO_ELECTRONICO",
+        u.nombre_usuario AS "NOMBRE_DOCTOR",
+        c.fecha_cita AS "FECHA_CITA",
+        c.estado AS "ESTADO"
+      FROM tbl_citas c
+      INNER JOIN tbl_paciente p ON c.id_paciente = p.id_paciente
+      LEFT JOIN tbl_ms_usuario u ON c.id_doctor = u.id_usuario
+      WHERE c.estado IN ('PRECLINICA', 'CONSULTA_MEDICA', 'CANCELADA', 'NO_ASISTIO')
+      ORDER BY c.fecha_cita DESC
     `);
 
     const { rows: preclinicas } = await pool.query(`
       SELECT
-        ID_PRECLINICA,
-        ID_CITA,
-        PESO,
-        TALLA,
-        TEMPERATURA,
-        ESTADO_GENERAL,
-        FECHA_REGISTRO,
-        OBSERVACIONES,
-        PRESION_SISTOLICA,
-        PRESION_DIASTOLICA,
-        FRECUENCIA_CARDIACA,
-        FRECUENCIA_RESPIRATORIA,
-        SATURACION_OXIGENO,
-        GLUCOSA,
-        PERIMETRO_ABDOMINAL,
-        SIGNOS_VITALES_JSON
-      FROM TBL_PRECLINICA
+        id_preclinica AS "ID_PRECLINICA",
+        id_cita AS "ID_CITA",
+        peso AS "PESO",
+        talla AS "TALLA",
+        temperatura AS "TEMPERATURA",
+        estado_general AS "ESTADO_GENERAL",
+        fecha_registro AS "FECHA_REGISTRO",
+        observaciones AS "OBSERVACIONES",
+        presion_sistolica AS "PRESION_SISTOLICA",
+        presion_diastolica AS "PRESION_DIASTOLICA",
+        frecuencia_cardiaca AS "FRECUENCIA_CARDIACA",
+        frecuencia_respiratoria AS "FRECUENCIA_RESPIRATORIA",
+        saturacion_oxigeno AS "SATURACION_OXIGENO",
+        glucosa AS "GLUCOSA",
+        perimetro_abdominal AS "PERIMETRO_ABDOMINAL",
+        signos_vitales_json AS "SIGNOS_VITALES_JSON"
+      FROM tbl_preclinica
     `);
 
     res.json({ citas, preclinicas });
@@ -168,8 +166,7 @@ router.get("/api/datos", async (req, res) => {
 });
 
 // ============================================================
-// GET /preclinica/por-cita/:idCita
-// Obtener una preclínica por cita
+// GET /preclinica/por-cita/:idCita - Obtener una preclínica por cita
 // ============================================================
 router.get("/por-cita/:idCita", async (req, res) => {
   try {
@@ -178,22 +175,41 @@ router.get("/por-cita/:idCita", async (req, res) => {
       return res.status(400).json({ success: false, message: "ID de cita inválido" });
     }
 
-    const { rows } = await pool.query(
-      `SELECT * FROM TBL_PRECLINICA WHERE ID_CITA = $1 LIMIT 1`,
-      [id]
-    );
+    const { rows } = await pool.query(`
+      SELECT
+        id_preclinica AS "ID_PRECLINICA",
+        id_cita AS "ID_CITA",
+        peso AS "PESO",
+        talla AS "TALLA",
+        temperatura AS "TEMPERATURA",
+        estado_general AS "ESTADO_GENERAL",
+        fecha_registro AS "FECHA_REGISTRO",
+        observaciones AS "OBSERVACIONES",
+        presion_sistolica AS "PRESION_SISTOLICA",
+        presion_diastolica AS "PRESION_DIASTOLICA",
+        frecuencia_cardiaca AS "FRECUENCIA_CARDIACA",
+        frecuencia_respiratoria AS "FRECUENCIA_RESPIRATORIA",
+        saturacion_oxigeno AS "SATURACION_OXIGENO",
+        glucosa AS "GLUCOSA",
+        perimetro_abdominal AS "PERIMETRO_ABDOMINAL",
+        signos_vitales_json AS "SIGNOS_VITALES_JSON"
+      FROM tbl_preclinica
+      WHERE id_cita = $1
+      LIMIT 1
+    `, [id]);
 
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, message: "No existe preclínica para esa cita" });
     }
 
     const preclinica = rows[0];
-    try {
-      if (preclinica.SIGNOS_VITALES_JSON && typeof preclinica.SIGNOS_VITALES_JSON === "string") {
+    // Intentar parsear SIGNOS_VITALES_JSON si es string
+    if (preclinica.SIGNOS_VITALES_JSON && typeof preclinica.SIGNOS_VITALES_JSON === "string") {
+      try {
         preclinica.SIGNOS_VITALES_JSON = JSON.parse(preclinica.SIGNOS_VITALES_JSON);
+      } catch (e) {
+        console.warn("No se pudo convertir SIGNOS_VITALES_JSON:", e);
       }
-    } catch (errorJson) {
-      console.warn("No se pudo convertir SIGNOS_VITALES_JSON:", errorJson);
     }
 
     res.json({ success: true, preclinica });
@@ -204,8 +220,7 @@ router.get("/por-cita/:idCita", async (req, res) => {
 });
 
 // ============================================================
-// POST /preclinica/nueva
-// Crear nueva preclínica
+// POST /preclinica/nueva - Crear nueva preclínica
 // ============================================================
 router.post("/nueva", async (req, res) => {
   const client = await pool.connect();
@@ -236,8 +251,9 @@ router.post("/nueva", async (req, res) => {
       return res.status(400).json({ success: false, message: "Falta ID de cita" });
     }
 
+    // Verificar si ya existe preclínica para esta cita
     const { rows: exists } = await client.query(
-      `SELECT ID_PRECLINICA FROM TBL_PRECLINICA WHERE ID_CITA = $1`,
+      `SELECT id_preclinica FROM tbl_preclinica WHERE id_cita = $1`,
       [idCitaNum]
     );
     if (exists && exists.length > 0) {
@@ -268,47 +284,44 @@ router.post("/nueva", async (req, res) => {
       })
     );
 
-    const { rows: result } = await client.query(
-      `
-      INSERT INTO TBL_PRECLINICA (
-        ID_CITA,
-        ID_USUARIO_ENFERMERIA,
-        TEMPERATURA,
-        PRESION_SISTOLICA,
-        PRESION_DIASTOLICA,
-        FRECUENCIA_CARDIACA,
-        FRECUENCIA_RESPIRATORIA,
-        SATURACION_OXIGENO,
-        PESO,
-        TALLA,
-        GLUCOSA,
-        PERIMETRO_ABDOMINAL,
-        OBSERVACIONES,
-        ESTADO_GENERAL,
-        SIGNOS_VITALES_JSON,
-        USUARIO_CREACION
+    const { rows: result } = await client.query(`
+      INSERT INTO tbl_preclinica (
+        id_cita,
+        id_usuario_enfermeria,
+        temperatura,
+        presion_sistolica,
+        presion_diastolica,
+        frecuencia_cardiaca,
+        frecuencia_respiratoria,
+        saturacion_oxigeno,
+        peso,
+        talla,
+        glucosa,
+        perimetro_abdominal,
+        observaciones,
+        estado_general,
+        signos_vitales_json,
+        usuario_creacion
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-      RETURNING ID_PRECLINICA
-      `,
-      [
-        idCitaNum,
-        req.user && req.user.ID_USUARIO ? req.user.ID_USUARIO : 1,
-        temperatura ?? null,
-        presionSistolica ?? null,
-        presionDiastolica ?? null,
-        frecuenciaCardiaca ?? null,
-        frecuenciaRespiratoria ?? null,
-        saturacionOxigeno ?? null,
-        peso ?? null,
-        talla ?? null,
-        glucosa ?? null,
-        perimetroAbdominal ?? null,
-        observaciones || null,
-        estadoGeneral || "BUENO",
-        signosJsonStr,
-        usuarioCreacion,
-      ]
-    );
+      RETURNING id_preclinica
+    `, [
+      idCitaNum,
+      req.user && req.user.ID_USUARIO ? req.user.ID_USUARIO : 1,
+      temperatura ?? null,
+      presionSistolica ?? null,
+      presionDiastolica ?? null,
+      frecuenciaCardiaca ?? null,
+      frecuenciaRespiratoria ?? null,
+      saturacionOxigeno ?? null,
+      peso ?? null,
+      talla ?? null,
+      glucosa ?? null,
+      perimetroAbdominal ?? null,
+      observaciones || null,
+      estadoGeneral || "BUENO",
+      signosJsonStr,
+      usuarioCreacion,
+    ]);
 
     if (!result || result.length === 0) {
       await client.query('ROLLBACK');
@@ -331,13 +344,11 @@ router.post("/nueva", async (req, res) => {
 
     if (debeEnviarAConsulta) {
       await client.query(
-        `
-        UPDATE TBL_CITAS
-        SET ESTADO = 'CONSULTA_MEDICA',
-            FECHA_MODIFICACION = CURRENT_TIMESTAMP,
-            USUARIO_MODIFICACION = $1
-        WHERE ID_CITA = $2
-        `,
+        `UPDATE tbl_citas
+         SET estado = 'CONSULTA_MEDICA',
+             fecha_modificacion = CURRENT_TIMESTAMP,
+             usuario_modificacion = $1
+         WHERE id_cita = $2`,
         [usuarioCreacion, idCitaNum]
       );
 
@@ -397,8 +408,7 @@ router.post("/nueva", async (req, res) => {
 });
 
 // ============================================================
-// POST /preclinica/actualizar
-// Actualizar una preclínica
+// POST /preclinica/actualizar - Actualizar preclínica
 // ============================================================
 router.post("/actualizar", async (req, res) => {
   const client = await pool.connect();
@@ -431,7 +441,7 @@ router.post("/actualizar", async (req, res) => {
     }
 
     const { rows: registroActual } = await client.query(
-      `SELECT ID_CITA FROM TBL_PRECLINICA WHERE ID_PRECLINICA = $1 LIMIT 1`,
+      `SELECT id_cita FROM tbl_preclinica WHERE id_preclinica = $1 LIMIT 1`,
       [idPre]
     );
     if (!registroActual || registroActual.length === 0) {
@@ -439,7 +449,7 @@ router.post("/actualizar", async (req, res) => {
       return res.status(404).json({ success: false, message: "Preclínica no encontrada" });
     }
 
-    const idCitaNum = Number(idCita || registroActual[0].ID_CITA || 0);
+    const idCitaNum = Number(idCita || registroActual[0].id_cita || 0);
     const usuarioMod = req.user && req.user.USUARIO ? req.user.USUARIO : "SISTEMA";
     const debeEnviarAConsulta = normalizarBooleano(enviarAConsulta);
     const datosClinicos = {
@@ -463,44 +473,41 @@ router.post("/actualizar", async (req, res) => {
       })
     );
 
-    const { rowCount } = await client.query(
-      `
-      UPDATE TBL_PRECLINICA
+    const { rowCount } = await client.query(`
+      UPDATE tbl_preclinica
       SET
-        TEMPERATURA = $1,
-        PRESION_SISTOLICA = $2,
-        PRESION_DIASTOLICA = $3,
-        FRECUENCIA_CARDIACA = $4,
-        FRECUENCIA_RESPIRATORIA = $5,
-        SATURACION_OXIGENO = $6,
-        PESO = $7,
-        TALLA = $8,
-        GLUCOSA = $9,
-        PERIMETRO_ABDOMINAL = $10,
-        OBSERVACIONES = $11,
-        ESTADO_GENERAL = $12,
-        SIGNOS_VITALES_JSON = $13,
-        USUARIO_MODIFICACION = $14
-      WHERE ID_PRECLINICA = $15
-      `,
-      [
-        temperatura ?? null,
-        presionSistolica ?? null,
-        presionDiastolica ?? null,
-        frecuenciaCardiaca ?? null,
-        frecuenciaRespiratoria ?? null,
-        saturacionOxigeno ?? null,
-        peso ?? null,
-        talla ?? null,
-        glucosa ?? null,
-        perimetroAbdominal ?? null,
-        observaciones || null,
-        estadoGeneral || "BUENO",
-        signosJsonStr,
-        usuarioMod,
-        idPre,
-      ]
-    );
+        temperatura = $1,
+        presion_sistolica = $2,
+        presion_diastolica = $3,
+        frecuencia_cardiaca = $4,
+        frecuencia_respiratoria = $5,
+        saturacion_oxigeno = $6,
+        peso = $7,
+        talla = $8,
+        glucosa = $9,
+        perimetro_abdominal = $10,
+        observaciones = $11,
+        estado_general = $12,
+        signos_vitales_json = $13,
+        usuario_modificacion = $14
+      WHERE id_preclinica = $15
+    `, [
+      temperatura ?? null,
+      presionSistolica ?? null,
+      presionDiastolica ?? null,
+      frecuenciaCardiaca ?? null,
+      frecuenciaRespiratoria ?? null,
+      saturacionOxigeno ?? null,
+      peso ?? null,
+      talla ?? null,
+      glucosa ?? null,
+      perimetroAbdominal ?? null,
+      observaciones || null,
+      estadoGeneral || "BUENO",
+      signosJsonStr,
+      usuarioMod,
+      idPre,
+    ]);
 
     if (rowCount === 0) {
       await client.query('ROLLBACK');
@@ -509,13 +516,11 @@ router.post("/actualizar", async (req, res) => {
 
     if (debeEnviarAConsulta && idCitaNum) {
       await client.query(
-        `
-        UPDATE TBL_CITAS
-        SET ESTADO = 'CONSULTA_MEDICA',
-            FECHA_MODIFICACION = CURRENT_TIMESTAMP,
-            USUARIO_MODIFICACION = $1
-        WHERE ID_CITA = $2
-        `,
+        `UPDATE tbl_citas
+         SET estado = 'CONSULTA_MEDICA',
+             fecha_modificacion = CURRENT_TIMESTAMP,
+             usuario_modificacion = $1
+         WHERE id_cita = $2`,
         [usuarioMod, idCitaNum]
       );
 
@@ -549,11 +554,11 @@ router.post("/actualizar", async (req, res) => {
     let estadoActual = "PRECLINICA";
     if (idCitaNum) {
       const { rows: estadoRows } = await client.query(
-        `SELECT ESTADO FROM TBL_CITAS WHERE ID_CITA = $1 LIMIT 1`,
+        `SELECT estado FROM tbl_citas WHERE id_cita = $1 LIMIT 1`,
         [idCitaNum]
       );
       if (estadoRows && estadoRows.length) {
-        estadoActual = estadoRows[0].ESTADO || estadoActual;
+        estadoActual = estadoRows[0].estado || estadoActual;
       }
     }
 
@@ -597,8 +602,7 @@ router.post("/actualizar", async (req, res) => {
 });
 
 // ============================================================
-// DELETE /preclinica/eliminar/:idCita
-// Eliminar una preclínica por ID de cita
+// DELETE /preclinica/eliminar/:idCita - Eliminar preclínica por ID de cita
 // ============================================================
 router.delete("/eliminar/:idCita", async (req, res) => {
   const client = await pool.connect();
@@ -611,17 +615,17 @@ router.delete("/eliminar/:idCita", async (req, res) => {
       return res.status(400).json({ success: false, message: "El ID de la cita no es válido" });
     }
 
-    const { rows } = await client.query(
-      `
-      SELECT p.ID_PRECLINICA, p.ID_CITA, c.ESTADO AS ESTADO_CITA
-      FROM TBL_PRECLINICA p
-      INNER JOIN TBL_CITAS c ON c.ID_CITA = p.ID_CITA
-      WHERE p.ID_CITA = $1
+    const { rows } = await client.query(`
+      SELECT
+        p.id_preclinica AS "ID_PRECLINICA",
+        p.id_cita AS "ID_CITA",
+        c.estado AS "ESTADO_CITA"
+      FROM tbl_preclinica p
+      INNER JOIN tbl_citas c ON c.id_cita = p.id_cita
+      WHERE p.id_cita = $1
       LIMIT 1
       FOR UPDATE
-      `,
-      [idCita]
-    );
+    `, [idCita]);
 
     if (!rows || rows.length === 0) {
       await client.query('ROLLBACK');
@@ -633,7 +637,7 @@ router.delete("/eliminar/:idCita", async (req, res) => {
     const estadoAnterior = String(preclinica.ESTADO_CITA || "").toUpperCase();
 
     const { rowCount } = await client.query(
-      `DELETE FROM TBL_PRECLINICA WHERE ID_PRECLINICA = $1 AND ID_CITA = $2`,
+      `DELETE FROM tbl_preclinica WHERE id_preclinica = $1 AND id_cita = $2`,
       [idPreclinica, idCita]
     );
 
@@ -645,16 +649,15 @@ router.delete("/eliminar/:idCita", async (req, res) => {
     const usuario = req.user && req.user.USUARIO ? req.user.USUARIO : "SISTEMA";
     let nuevoEstado = estadoAnterior;
 
+    // Si la cita estaba en CONSULTA_MEDICA, volver a PRECLINICA
     if (estadoAnterior === "CONSULTA_MEDICA") {
       nuevoEstado = "PRECLINICA";
       await client.query(
-        `
-        UPDATE TBL_CITAS
-        SET ESTADO = 'PRECLINICA',
-            FECHA_MODIFICACION = CURRENT_TIMESTAMP,
-            USUARIO_MODIFICACION = $1
-        WHERE ID_CITA = $2
-        `,
+        `UPDATE tbl_citas
+         SET estado = 'PRECLINICA',
+             fecha_modificacion = CURRENT_TIMESTAMP,
+             usuario_modificacion = $1
+         WHERE id_cita = $2`,
         [usuario, idCita]
       );
     }
@@ -701,6 +704,7 @@ router.delete("/eliminar/:idCita", async (req, res) => {
     await client.query('ROLLBACK');
     console.error("DELETE /preclinica/eliminar/:idCita error:", err);
 
+    // PostgreSQL error por clave foránea (23503)
     if (err.code === '23503') {
       return res.status(409).json({
         success: false,
@@ -730,8 +734,7 @@ router.delete("/eliminar/:idCita", async (req, res) => {
 });
 
 // ============================================================
-// POST /preclinica/pasar-a-consulta
-// Pasar cita a consulta médica, incluso si hay datos pendientes
+// POST /preclinica/pasar-a-consulta - Pasar cita a consulta médica
 // ============================================================
 router.post("/pasar-a-consulta", async (req, res) => {
   const client = await pool.connect();
@@ -744,27 +747,24 @@ router.post("/pasar-a-consulta", async (req, res) => {
       return res.status(400).json({ success: false, message: "ID de cita inválido" });
     }
 
-    const { rows } = await client.query(
-      `
+    const { rows } = await client.query(`
       SELECT
-        ID_PRECLINICA,
-        TEMPERATURA,
-        PRESION_SISTOLICA,
-        PRESION_DIASTOLICA,
-        FRECUENCIA_CARDIACA,
-        FRECUENCIA_RESPIRATORIA,
-        SATURACION_OXIGENO,
-        PESO,
-        TALLA,
-        GLUCOSA,
-        PERIMETRO_ABDOMINAL,
-        SIGNOS_VITALES_JSON
-      FROM TBL_PRECLINICA
-      WHERE ID_CITA = $1
+        id_preclinica AS "ID_PRECLINICA",
+        temperatura AS "TEMPERATURA",
+        presion_sistolica AS "PRESION_SISTOLICA",
+        presion_diastolica AS "PRESION_DIASTOLICA",
+        frecuencia_cardiaca AS "FRECUENCIA_CARDIACA",
+        frecuencia_respiratoria AS "FRECUENCIA_RESPIRATORIA",
+        saturacion_oxigeno AS "SATURACION_OXIGENO",
+        peso AS "PESO",
+        talla AS "TALLA",
+        glucosa AS "GLUCOSA",
+        perimetro_abdominal AS "PERIMETRO_ABDOMINAL",
+        signos_vitales_json AS "SIGNOS_VITALES_JSON"
+      FROM tbl_preclinica
+      WHERE id_cita = $1
       LIMIT 1
-      `,
-      [id]
-    );
+    `, [id]);
 
     if (!rows || rows.length === 0) {
       await client.query('ROLLBACK');
@@ -795,23 +795,19 @@ router.post("/pasar-a-consulta", async (req, res) => {
     const usuario = req.user && req.user.USUARIO ? req.user.USUARIO : "SISTEMA";
 
     await client.query(
-      `
-      UPDATE TBL_PRECLINICA
-      SET SIGNOS_VITALES_JSON = $1,
-          USUARIO_MODIFICACION = $2
-      WHERE ID_PRECLINICA = $3
-      `,
+      `UPDATE tbl_preclinica
+       SET signos_vitales_json = $1,
+           usuario_modificacion = $2
+       WHERE id_preclinica = $3`,
       [signosJsonStr, usuario, registro.ID_PRECLINICA]
     );
 
     await client.query(
-      `
-      UPDATE TBL_CITAS
-      SET ESTADO = 'CONSULTA_MEDICA',
-          FECHA_MODIFICACION = CURRENT_TIMESTAMP,
-          USUARIO_MODIFICACION = $1
-      WHERE ID_CITA = $2
-      `,
+      `UPDATE tbl_citas
+       SET estado = 'CONSULTA_MEDICA',
+           fecha_modificacion = CURRENT_TIMESTAMP,
+           usuario_modificacion = $1
+       WHERE id_cita = $2`,
       [usuario, id]
     );
 
@@ -848,8 +844,7 @@ router.post("/pasar-a-consulta", async (req, res) => {
 });
 
 // ============================================================
-// GET /preclinica/alertas-consulta/:idCita
-// Devuelve las alertas que Consulta Médica debe mostrar
+// GET /preclinica/alertas-consulta/:idCita - Alertas para Consulta Médica
 // ============================================================
 router.get("/alertas-consulta/:idCita", async (req, res) => {
   try {
@@ -858,26 +853,23 @@ router.get("/alertas-consulta/:idCita", async (req, res) => {
       return res.status(400).json({ success: false, message: "ID de cita inválido" });
     }
 
-    const { rows } = await pool.query(
-      `
+    const { rows } = await pool.query(`
       SELECT
-        TEMPERATURA,
-        PRESION_SISTOLICA,
-        PRESION_DIASTOLICA,
-        FRECUENCIA_CARDIACA,
-        FRECUENCIA_RESPIRATORIA,
-        SATURACION_OXIGENO,
-        PESO,
-        TALLA,
-        GLUCOSA,
-        PERIMETRO_ABDOMINAL,
-        SIGNOS_VITALES_JSON
-      FROM TBL_PRECLINICA
-      WHERE ID_CITA = $1
+        temperatura AS "TEMPERATURA",
+        presion_sistolica AS "PRESION_SISTOLICA",
+        presion_diastolica AS "PRESION_DIASTOLICA",
+        frecuencia_cardiaca AS "FRECUENCIA_CARDIACA",
+        frecuencia_respiratoria AS "FRECUENCIA_RESPIRATORIA",
+        saturacion_oxigeno AS "SATURACION_OXIGENO",
+        peso AS "PESO",
+        talla AS "TALLA",
+        glucosa AS "GLUCOSA",
+        perimetro_abdominal AS "PERIMETRO_ABDOMINAL",
+        signos_vitales_json AS "SIGNOS_VITALES_JSON"
+      FROM tbl_preclinica
+      WHERE id_cita = $1
       LIMIT 1
-      `,
-      [idCita]
-    );
+    `, [idCita]);
 
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, message: "No existe preclínica para esta cita" });
@@ -923,8 +915,7 @@ router.get("/alertas-consulta/:idCita", async (req, res) => {
 });
 
 // ============================================================
-// GET /preclinica/excel
-// Descargar reporte de Excel
+// GET /preclinica/excel - Exportar Excel (NO SE MODIFICA)
 // ============================================================
 router.get("/excel", async (req, res) => {
   try {
@@ -932,32 +923,32 @@ router.get("/excel", async (req, res) => {
 
     const { rows: preclinicas } = await pool.query(`
       SELECT
-        p.ID_PRECLINICA,
-        c.ID_CITA,
-        CONCAT(pa.NOMBRES, ' ', pa.APELLIDOS) AS NOMBRE_PACIENTE,
-        pa.NUMERO_DOCUMENTO_IDENTIDAD AS IDENTIDAD_PACIENTE,
-        pa.TELEFONO,
-        p.FECHA_REGISTRO,
-        p.TEMPERATURA,
-        p.PRESION_SISTOLICA,
-        p.PRESION_DIASTOLICA,
-        p.FRECUENCIA_CARDIACA,
-        p.FRECUENCIA_RESPIRATORIA,
-        p.SATURACION_OXIGENO,
-        p.PESO,
-        p.TALLA,
-        p.IMC,
-        p.GLUCOSA,
-        p.PERIMETRO_ABDOMINAL,
-        p.ESTADO_GENERAL,
-        p.OBSERVACIONES,
-        u.NOMBRE_USUARIO AS ENFERMERA,
-        c.ESTADO AS ESTADO_CITA
-      FROM TBL_PRECLINICA p
-      INNER JOIN TBL_CITAS c ON p.ID_CITA = c.ID_CITA
-      INNER JOIN TBL_PACIENTE pa ON c.ID_PACIENTE = pa.ID_PACIENTE
-      LEFT JOIN TBL_MS_USUARIO u ON p.ID_USUARIO_ENFERMERIA = u.ID_USUARIO
-      ORDER BY p.FECHA_REGISTRO DESC
+        p.id_preclinica AS "ID_PRECLINICA",
+        c.id_cita AS "ID_CITA",
+        CONCAT(pa.nombres, ' ', pa.apellidos) AS "NOMBRE_PACIENTE",
+        pa.numero_documento_identidad AS "IDENTIDAD_PACIENTE",
+        pa.telefono AS "TELEFONO",
+        p.fecha_registro AS "FECHA_REGISTRO",
+        p.temperatura AS "TEMPERATURA",
+        p.presion_sistolica AS "PRESION_SISTOLICA",
+        p.presion_diastolica AS "PRESION_DIASTOLICA",
+        p.frecuencia_cardiaca AS "FRECUENCIA_CARDIACA",
+        p.frecuencia_respiratoria AS "FRECUENCIA_RESPIRATORIA",
+        p.saturacion_oxigeno AS "SATURACION_OXIGENO",
+        p.peso AS "PESO",
+        p.talla AS "TALLA",
+        p.imc AS "IMC",
+        p.glucosa AS "GLUCOSA",
+        p.perimetro_abdominal AS "PERIMETRO_ABDOMINAL",
+        p.estado_general AS "ESTADO_GENERAL",
+        p.observaciones AS "OBSERVACIONES",
+        u.nombre_usuario AS "ENFERMERA",
+        c.estado AS "ESTADO_CITA"
+      FROM tbl_preclinica p
+      INNER JOIN tbl_citas c ON p.id_cita = c.id_cita
+      INNER JOIN tbl_paciente pa ON c.id_paciente = pa.id_paciente
+      LEFT JOIN tbl_ms_usuario u ON p.id_usuario_enfermeria = u.id_usuario
+      ORDER BY p.fecha_registro DESC
     `);
 
     console.log(`Preclínicas encontradas: ${preclinicas.length}`);
@@ -985,6 +976,93 @@ router.get("/excel", async (req, res) => {
   } catch (error) {
     console.error("Error exportando Excel de preclínica:", error);
     res.status(500).json({ success: false, message: "Error al generar el archivo Excel: " + error.message });
+  }
+});
+
+// ============================================================
+// DELETE /citas/eliminar/:idCita - Eliminar una cita completa
+// ============================================================
+router.delete("/citas/eliminar/:idCita", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const idCita = Number(req.params.idCita || 0);
+    if (!idCita || !Number.isInteger(idCita)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: "El ID de la cita no es válido" });
+    }
+
+    // Verificar si la cita existe
+    const { rows: citaCheck } = await client.query(
+      `SELECT id_cita FROM tbl_citas WHERE id_cita = $1 LIMIT 1 FOR UPDATE`,
+      [idCita]
+    );
+    if (!citaCheck || citaCheck.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: "No se encontró la cita para eliminar." });
+    }
+
+    // Eliminar dependencias (Preclínicas)
+    await client.query(`DELETE FROM tbl_preclinica WHERE id_cita = $1`, [idCita]);
+
+    // Eliminar la cita principal
+    const { rowCount } = await client.query(
+      `DELETE FROM tbl_citas WHERE id_cita = $1`,
+      [idCita]
+    );
+
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: "No se pudo eliminar la cita." });
+    }
+
+    await client.query('COMMIT');
+
+    const usuario = req.user && req.user.USUARIO ? req.user.USUARIO : "SISTEMA";
+
+    try {
+      await registrarBitacora({
+        usuario,
+        accion: "ELIMINACION_CITA",
+        descripcion: `Eliminada la cita ID ${idCita} junto con sus preclínicas asociadas`,
+        modulo: "CITAS",
+        idRegistro: idCita,
+        tabla: "TBL_CITAS",
+        estado: "EXITO",
+        req,
+      });
+    } catch (errorBitacora) {
+      console.error("Error registrando eliminación de cita en bitácora:", errorBitacora);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Cita y sus registros asociados eliminados correctamente.",
+      idCita,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("DELETE /citas/eliminar/:idCita error:", err);
+
+    try {
+      await registrarBitacora({
+        usuario: req.user && req.user.USUARIO ? req.user.USUARIO : "SISTEMA",
+        accion: "ERROR_ELIMINACION_CITA",
+        descripcion: err.message,
+        modulo: "CITAS",
+        tabla: "TBL_CITAS",
+        estado: "ERROR",
+        detalleError: err.message,
+        req,
+      });
+    } catch (errorBitacora) {
+      console.error("Error registrando fallo de eliminación de cita en bitácora:", errorBitacora);
+    }
+
+    return res.status(500).json({ success: false, message: "Error eliminando la cita: " + err.message });
+  } finally {
+    client.release();
   }
 });
 
