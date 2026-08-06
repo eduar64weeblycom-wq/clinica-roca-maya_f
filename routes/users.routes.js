@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../database/db');
+const pool = require('../database/db'); // PostgreSQL pool
 const { registrarBitacora } = require('../services/bitacora.service');
-const xl = require('excel4node'); // Asegúrate de tenerlo requerido si usas exportación Excel
 
 // ============================================================
 // RUTA PRINCIPAL - Mostrar vista de usuarios
@@ -25,7 +24,6 @@ router.get("/", async (req, res) => {
       ORDER BY u.id_usuario
     `);
 
-    // Obtener todos los roles
     const { rows: roles } = await pool.query(
       `SELECT id_rol AS "ID_ROL", rol AS "ROL", descripcion AS "DESCRIPCION" 
        FROM tbl_ms_roles 
@@ -62,13 +60,23 @@ router.get("/api/especialidades", async (req, res) => {
 });
 
 // ============================================================
-// API: Obtener usuario por ID (con especialidades si es doctor)
+// API: Obtener usuario por ID (con especialidades y teléfono)
 // ============================================================
 router.get("/api/usuario/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const { rows } = await pool.query(
-      `SELECT u.*, r.rol AS "ROL" 
+      `SELECT 
+        u.id_usuario AS "ID_USUARIO",
+        u.usuario AS "USUARIO",
+        u.nombre_usuario AS "NOMBRE_USUARIO",
+        u.estado AS "ESTADO",
+        u.correo_electronico AS "CORREO_ELECTRONICO",
+        u.activo_2fa AS "ACTIVO_2FA",
+        u.fecha_ultima_conexion AS "FECHA_ULTIMA_CONEXION",
+        u.telefono_profesional AS "TELEFONO_PROFESIONAL",
+        r.rol AS "ROL",
+        r.id_rol AS "ID_ROL"
        FROM tbl_ms_usuario u 
        INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol 
        WHERE u.id_usuario = $1`,
@@ -79,14 +87,12 @@ router.get("/api/usuario/:id", async (req, res) => {
     }
     const usuario = rows[0];
     let especialidades = [];
-    
-    // Si es doctor (ID_ROL = 2)
-    if (usuario.id_rol === 2 || usuario.ID_ROL === 2) {
+    if (usuario.ID_ROL === 2) {
       const { rows: espRows } = await pool.query(
-        `SELECT id_especialidad FROM tbl_doctor_especialidad WHERE id_doctor = $1`,
+        `SELECT id_especialidad AS "ID_ESPECIALIDAD" FROM tbl_doctor_especialidad WHERE id_doctor = $1`,
         [id]
       );
-      especialidades = espRows.map(row => row.id_especialidad || row.ID_ESPECIALIDAD);
+      especialidades = espRows.map(row => row.ID_ESPECIALIDAD);
     }
     res.json({ ok: true, usuario, especialidades });
   } catch (error) {
@@ -96,10 +102,13 @@ router.get("/api/usuario/:id", async (req, res) => {
 });
 
 // ============================================================
-// API: Actualizar usuario (incluyendo especialidades)
+// API: Actualizar usuario (incluye TELEFONO_PROFESIONAL) - CON BITÁCORA DETALLADA
 // ============================================================
 router.post("/api/update", async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     const {
       id,
       usuario,
@@ -108,59 +117,150 @@ router.post("/api/update", async (req, res) => {
       estado,
       activo_2fa,
       usuarioAccion,
-      especialidades
+      especialidades,
+      telefonoProfesional
     } = req.body;
 
     if (!id || !usuario || !nombre_usuario || !id_rol || !estado) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ ok: false, msg: "Faltan campos obligatorios" });
     }
 
-    // Actualizar datos básicos del usuario
-    await pool.query(
+    // 1. Obtener datos actuales del usuario
+    const { rows: usuarioActual } = await client.query(
+      `SELECT 
+        u.id_usuario AS "ID_USUARIO",
+        u.usuario AS "USUARIO",
+        u.nombre_usuario AS "NOMBRE_USUARIO",
+        u.estado AS "ESTADO",
+        u.telefono_profesional AS "TELEFONO_PROFESIONAL",
+        r.rol AS "NOMBRE_ROL",
+        r.id_rol AS "ID_ROL"
+       FROM tbl_ms_usuario u 
+       INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol 
+       WHERE u.id_usuario = $1`,
+      [id]
+    );
+    if (usuarioActual.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
+    }
+    const old = usuarioActual[0];
+
+    // 2. Actualizar usuario
+    const rolId = parseInt(id_rol);
+    if (isNaN(rolId)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ ok: false, msg: "El rol debe ser un número válido" });
+    }
+
+    await client.query(
       `UPDATE tbl_ms_usuario SET 
         usuario = $1, 
         nombre_usuario = $2, 
         id_rol = $3, 
         estado = $4, 
         activo_2fa = $5, 
+        telefono_profesional = $6,
         fecha_modificacion = CURRENT_TIMESTAMP, 
-        usuario_modificacion = $6 
-      WHERE id_usuario = $7`,
-      [usuario, nombre_usuario, id_rol, estado, activo_2fa || 0, usuarioAccion || 'SISTEMA', id]
+        usuario_modificacion = $7 
+      WHERE id_usuario = $8`,
+      [usuario, nombre_usuario, rolId, estado, activo_2fa || 0, telefonoProfesional || null, usuarioAccion || 'SISTEMA', id]
     );
 
-    // ============================================================
-    // GESTIÓN DE ESPECIALIDADES (SOLO PARA DOCTORES)
-    // ============================================================
-    if (parseInt(id_rol) === 2) {
-      await pool.query(`DELETE FROM tbl_doctor_especialidad WHERE id_doctor = $1`, [id]);
+    // 3. Actualizar especialidades (si es doctor)
+    let especialidadesAntes = [];
+    let especialidadesDespues = [];
+    if (rolId === 2) {
+      const { rows: espAntes } = await client.query(
+        `SELECT id_especialidad AS "ID_ESPECIALIDAD" FROM tbl_doctor_especialidad WHERE id_doctor = $1`,
+        [id]
+      );
+      especialidadesAntes = espAntes.map(row => row.ID_ESPECIALIDAD);
+
+      await client.query(`DELETE FROM tbl_doctor_especialidad WHERE id_doctor = $1`, [id]);
       
       if (especialidades && especialidades.length > 0) {
-        for (const espId of especialidades) {
-          await pool.query(
-            `INSERT INTO tbl_doctor_especialidad (id_doctor, id_especialidad) VALUES ($1, $2)`,
-            [parseInt(id), parseInt(espId)]
-          );
+        // Construir INSERT múltiple
+        const values = [];
+        const placeholders = [];
+        let paramIndex = 1;
+        especialidades.forEach(espId => {
+          values.push(id, espId);
+          placeholders.push(`($${paramIndex}, $${paramIndex+1})`);
+          paramIndex += 2;
+        });
+        await client.query(
+          `INSERT INTO tbl_doctor_especialidad (id_doctor, id_especialidad) VALUES ${placeholders.join(', ')}`,
+          values
+        );
+        especialidadesDespues = especialidades.map(Number);
+      }
+    }
+
+    // 4. Construir mensaje detallado de bitácora
+    const cambios = [];
+    if (old.USUARIO !== usuario) {
+      cambios.push(`Usuario: '${old.USUARIO}' → '${usuario}'`);
+    }
+    if (old.NOMBRE_USUARIO !== nombre_usuario) {
+      cambios.push(`Nombre: '${old.NOMBRE_USUARIO}' → '${nombre_usuario}'`);
+    }
+    if (Number(old.ID_ROL) !== rolId) {
+      const { rows: rolNuevo } = await client.query(`SELECT rol AS "ROL" FROM tbl_ms_roles WHERE id_rol = $1`, [rolId]);
+      const nombreRolNuevo = rolNuevo.length ? rolNuevo[0].ROL : 'Desconocido';
+      cambios.push(`Rol: '${old.NOMBRE_ROL}' → '${nombreRolNuevo}'`);
+    }
+    if (old.ESTADO !== estado) {
+      cambios.push(`Estado: '${old.ESTADO}' → '${estado}'`);
+    }
+    const oldTelefono = old.TELEFONO_PROFESIONAL || 'Ninguno';
+    const newTelefono = telefonoProfesional || 'Ninguno';
+    if (oldTelefono !== newTelefono) {
+      cambios.push(`Teléfono profesional: '${oldTelefono}' → '${newTelefono}'`);
+    }
+
+    if (rolId === 2) {
+      const espAntesStr = especialidadesAntes.sort().join(', ');
+      const espDespuesStr = especialidadesDespues.sort().join(', ');
+      if (espAntesStr !== espDespuesStr) {
+        if (especialidadesDespues.length === 0) {
+          cambios.push(`Especialidades: se eliminaron todas las especialidades`);
+        } else if (especialidadesAntes.length === 0) {
+          cambios.push(`Especialidades: se agregaron ${especialidadesDespues.length} especialidad(es)`);
+        } else {
+          cambios.push(`Especialidades: se modificaron (antes: ${espAntesStr || 'Ninguna'}, ahora: ${espDespuesStr || 'Ninguna'})`);
         }
       }
     }
 
+    let mensajeBitacora = `El usuario '${usuarioAccion || 'SISTEMA'}' actualizó al usuario '${usuario}'`;
+    if (cambios.length > 0) {
+      mensajeBitacora += ` - Cambios: ${cambios.join('; ')}.`;
+    } else {
+      mensajeBitacora += ` (sin cambios visibles).`;
+    }
+
+    await client.query('COMMIT');
+
     await registrarBitacora({
       usuario: usuarioAccion || 'SISTEMA',
       accion: "ACTUALIZACION_USUARIO",
-      descripcion: `Usuario ${usuario} actualizado. Rol: ${id_rol}. Especialidades: ${especialidades ? especialidades.join(', ') : 'Ninguna'}`,
+      descripcion: mensajeBitacora,
       modulo: "USUARIOS",
       idRegistro: id,
-      tabla: "tbl_ms_usuario",
+      tabla: "TBL_MS_USUARIO",
       estado: "EXITO",
       req
     });
 
     res.json({ ok: true, msg: "Usuario actualizado correctamente" });
-
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error("❌ Error en POST /users/api/update:", error);
     res.status(500).json({ ok: false, msg: "Error al actualizar usuario: " + error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -174,6 +274,9 @@ router.post("/api/cambiar-estado", async (req, res) => {
       return res.status(400).json({ ok: false, msg: "Faltan parámetros" });
     }
 
+    const { rows: user } = await pool.query(`SELECT usuario FROM tbl_ms_usuario WHERE id_usuario = $1`, [id]);
+    const nombreUsuario = user.length ? user[0].usuario : 'Desconocido';
+
     await pool.query(
       `UPDATE tbl_ms_usuario SET estado = $1, fecha_modificacion = CURRENT_TIMESTAMP, usuario_modificacion = $2 WHERE id_usuario = $3`,
       [estado, usuarioAccion || 'SISTEMA', id]
@@ -182,10 +285,10 @@ router.post("/api/cambiar-estado", async (req, res) => {
     await registrarBitacora({
       usuario: usuarioAccion || 'SISTEMA',
       accion: "CAMBIO_ESTADO_USUARIO",
-      descripcion: `Usuario ID ${id} cambió a estado: ${estado}`,
+      descripcion: `El usuario '${usuarioAccion || 'SISTEMA'}' cambió el estado del usuario '${nombreUsuario}' a: ${estado}`,
       modulo: "USUARIOS",
       idRegistro: id,
-      tabla: "tbl_ms_usuario",
+      tabla: "TBL_MS_USUARIO",
       estado: "EXITO",
       req
     });
@@ -194,100 +297,6 @@ router.post("/api/cambiar-estado", async (req, res) => {
   } catch (error) {
     console.error("❌ Error en POST /api/cambiar-estado:", error);
     res.status(500).json({ ok: false, msg: "Error al cambiar estado" });
-  }
-});
-
-// ============================================================
-// GET /excel/usuarios -> Descargar Excel de usuarios
-// ============================================================
-router.get("/usuarios", async (req, res) => {
-  try {
-    const { rows: usuarios } = await pool.query(`
-      SELECT 
-        u.usuario,
-        u.nombre_usuario,
-        r.rol AS rol,
-        u.estado,
-        u.correo_electronico,
-        CASE WHEN u.activo_2fa = 1 THEN 'Sí' ELSE 'No' END AS activo_2fa,
-        u.fecha_ultima_conexion
-      FROM tbl_ms_usuario u
-      INNER JOIN tbl_ms_roles r ON u.id_rol = r.id_rol
-      ORDER BY u.id_usuario
-    `);
-
-    if (!usuarios || usuarios.length === 0) {
-      return res.status(404).json({ success: false, message: "No hay usuarios para exportar" });
-    }
-
-    const wb = new xl.Workbook();
-    const ws = wb.addWorksheet('Usuarios');
-
-    const headerStyle = wb.createStyle({
-      font: { bold: true, color: '#FFFFFF', size: 12 },
-      fill: { type: 'pattern', patternType: 'solid', bgColor: '#217346', fgColor: '#217346' },
-      alignment: { horizontal: 'center', vertical: 'center' },
-    });
-
-    const cellStyle = wb.createStyle({
-      alignment: { horizontal: 'left', vertical: 'center' },
-      border: {
-        left: { style: 'thin', color: '#000000' },
-        right: { style: 'thin', color: '#000000' },
-        top: { style: 'thin', color: '#000000' },
-        bottom: { style: 'thin', color: '#000000' },
-      },
-    });
-
-    const headers = ['Usuario', 'Nombre', 'Rol', 'Estado', 'Correo', '2FA Activado', 'Última Conexión'];
-    headers.forEach((header, index) => {
-      ws.cell(1, index + 1).string(header).style(headerStyle);
-    });
-
-    usuarios.forEach((usuario, rowIndex) => {
-      const row = rowIndex + 2;
-      ws.cell(row, 1).string(usuario.usuario || '').style(cellStyle);
-      ws.cell(row, 2).string(usuario.nombre_usuario || '').style(cellStyle);
-      ws.cell(row, 3).string(usuario.rol || '').style(cellStyle);
-      ws.cell(row, 4).string(usuario.estado || '').style(cellStyle);
-      ws.cell(row, 5).string(usuario.correo_electronico || '').style(cellStyle);
-      ws.cell(row, 6).string(usuario.activo_2fa || 'No').style(cellStyle);
-      ws.cell(row, 7).string(usuario.fecha_ultima_conexion ? new Date(usuario.fecha_ultima_conexion).toLocaleString() : 'Nunca').style(cellStyle);
-    });
-
-    ws.column(1).setWidth(20);
-    ws.column(2).setWidth(30);
-    ws.column(3).setWidth(20);
-    ws.column(4).setWidth(15);
-    ws.column(5).setWidth(30);
-    ws.column(6).setWidth(18);
-    ws.column(7).setWidth(25);
-
-    const fecha = new Date().toISOString().split('T')[0];
-    const fileName = `Usuarios_${fecha}.xlsx`;
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
-
-    wb.write(fileName, res);
-
-    try {
-      await registrarBitacora({
-        usuario: req.user?.nombre || "SISTEMA",
-        accion: "EXPORTAR_EXCEL_USUARIOS",
-        descripcion: `Exportados ${usuarios.length} usuarios a Excel`,
-        modulo: "USUARIOS",
-        tabla: "tbl_ms_usuario",
-        estado: "EXITO",
-        req
-      });
-    } catch (bitError) {
-      console.error("Error registrando bitácora:", bitError);
-    }
-
-  } catch (error) {
-    console.error("❌ Error exportando Excel de usuarios:", error);
-    res.status(500).json({ success: false, message: "Error al generar el archivo Excel: " + error.message });
   }
 });
 
@@ -309,10 +318,10 @@ router.post("/api/delete", async (req, res) => {
     await registrarBitacora({
       usuario: usuarioAccion || 'SISTEMA',
       accion: "ELIMINACION_USUARIO",
-      descripcion: `Usuario ${nombreUsuario} (ID ${id}) eliminado permanentemente`,
+      descripcion: `El usuario '${usuarioAccion || 'SISTEMA'}' eliminó permanentemente al usuario '${nombreUsuario}' (ID ${id})`,
       modulo: "USUARIOS",
       idRegistro: id,
-      tabla: "tbl_ms_usuario",
+      tabla: "TBL_MS_USUARIO",
       estado: "EXITO",
       req
     });
