@@ -92,7 +92,7 @@ app.use(async (req, res, next) => {
   
   if (usuario) {
     try {
-      const [userData] = await pool.query(`
+      const resultado = await pool.query(`
         SELECT 
           u."ID_USUARIO",
           u."USUARIO",
@@ -106,7 +106,9 @@ app.use(async (req, res, next) => {
         WHERE u."USUARIO" = $1
       `, [usuario]);
       
-      if (userData.length > 0) {
+      const userData = resultado.rows; // 👈 Extraemos .rows correctamente del resultado de pg
+      
+      if (userData && userData.length > 0) {
         req.user = userData[0];
         req.usuarioActual = usuario;
         
