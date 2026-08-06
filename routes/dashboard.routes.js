@@ -16,7 +16,6 @@ router.get("/", async (req, res) => {
     const usuario = req.usuarioActual;
     const esPrimerIngreso = req.esPrimerIngreso || false;
 
-    // Consulta corregida sin la columna "ESTADO" en TBL_MS_USUARIO
     const resultadoUser = await db.query(`
       SELECT u."ID_USUARIO", u."USUARIO", u."NOMBRE_USUARIO", u."CORREO_ELECTRONICO", r."ROL", r."ID_ROL"
       FROM "TBL_MS_USUARIO" u
@@ -114,7 +113,6 @@ router.post('/cambiar-password', async (req, res) => {
       });
     }
 
-    // Consulta corregida sin la columna "ESTADO"
     const resUser = await db.query(`
       SELECT "ID_USUARIO", "CONTRASENA" 
       FROM "TBL_MS_USUARIO" 
@@ -145,7 +143,6 @@ router.post('/cambiar-password', async (req, res) => {
 
     const newHashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Actualización de contraseña sin modificar la columna ESTADO inexistente
     await db.query(`
       UPDATE "TBL_MS_USUARIO" 
       SET "CONTRASENA" = $1, 
@@ -154,7 +151,6 @@ router.post('/cambiar-password', async (req, res) => {
       WHERE "ID_USUARIO" = $3
     `, [newHashedPassword, usuario, userId]);
 
-    // Registro en bitácora
     await db.query(`
       INSERT INTO "TBL_MS_BITACORA" (
         "ID_USUARIO", "ACCION", "DESCRIPCION", "MODULO", 
