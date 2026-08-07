@@ -1,8 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../database/db'); // Asegúrate de que este pool sea de PostgreSQL (pg)
+const pool = require('../database/db');
 
 const { registrarBitacora } = require('../services/bitacora.service');
+
+// Función auxiliar para obtener o crear un medicamento
+async function getOrCreateMedicamento(nombreMedicamento, usuario) {
+  if (!nombreMedicamento || !nombreMedicamento.trim()) return null;
+  const nombreLimpio = nombreMedicamento.trim().toUpperCase();
+
+  const [existing] = await pool.query(
+    "SELECT ID_MEDICAMENTO FROM TBL_MEDICAMENTO WHERE UPPER(NOMBRE_MEDICAMENTO) = ?",
+    [nombreLimpio]
+  );
+
+  if (existing.length > 0) {
+    return existing[0].ID_MEDICAMENTO;
+  }
+
+  const [result] = await pool.query(
+    "INSERT INTO TBL_MEDICAMENTO (NOMBRE_MEDICAMENTO, USUARIO_CREACION, FECHA_CREACION) VALUES (?, ?, CURRENT_TIMESTAMP)",
+    [nombreLimpio, usuario || 'SISTEMA']
+  );
+  return result.insertId;
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -10,7 +31,7 @@ router.get("/", async (req, res) => {
     let citas = [];
 
     if (usuario && usuario.ROL === 'ADMINISTRADOR') {
-      const { rows } = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT 
           c.ID_CITA,
           CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -29,7 +50,7 @@ router.get("/", async (req, res) => {
       `);
       citas = rows;
     } else if (usuario && usuario.ROL === 'DOCTOR') {
-      const { rows } = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT 
           c.ID_CITA,
           CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -44,13 +65,13 @@ router.get("/", async (req, res) => {
         INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
         INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
         WHERE c.ESTADO IN ('CONSULTA_MEDICA', 'PRECLINICA')
-          AND c.ID_DOCTOR = $1
+          AND c.ID_DOCTOR = ?
         ORDER BY c.FECHA_CITA DESC
       `, [usuario.ID_USUARIO]);
       citas = rows;
     }
 
-    const { rows: doctores } = await pool.query(`
+    const [doctores] = await pool.query(`
       SELECT 
         u.ID_USUARIO, 
         u.NOMBRE_USUARIO 
@@ -90,7 +111,7 @@ router.get("/api/calendario", async (req, res) => {
     let citas = [];
 
     if (usuario && usuario.ROL === 'ADMINISTRADOR') {
-      const { rows } = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT 
           c.ID_CITA,
           CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -100,7 +121,7 @@ router.get("/api/calendario", async (req, res) => {
           u.ID_USUARIO AS ID_DOCTOR,
           u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
           c.FECHA_CITA,
-          TO_CHAR(c.FECHA_CITA, 'HH24:MI') AS HORA_CITA,
+          DATE_FORMAT(c.FECHA_CITA, '%H:%i') AS HORA_CITA,
           c.ESTADO,
           c.MOTIVO_CONSULTA,
           c.PRIORIDAD,
@@ -114,7 +135,7 @@ router.get("/api/calendario", async (req, res) => {
       `);
       citas = rows;
     } else if (usuario && usuario.ROL === 'DOCTOR') {
-      const { rows } = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT 
           c.ID_CITA,
           CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -124,7 +145,7 @@ router.get("/api/calendario", async (req, res) => {
           u.ID_USUARIO AS ID_DOCTOR,
           u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
           c.FECHA_CITA,
-          TO_CHAR(c.FECHA_CITA, 'HH24:MI') AS HORA_CITA,
+          DATE_FORMAT(c.FECHA_CITA, '%H:%i') AS HORA_CITA,
           c.ESTADO,
           c.MOTIVO_CONSULTA,
           c.PRIORIDAD,
@@ -134,17 +155,17 @@ router.get("/api/calendario", async (req, res) => {
         INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
         INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
         WHERE c.ESTADO IN ('CONSULTA_MEDICA', 'PRECLINICA')
-          AND c.ID_DOCTOR = $1
+          AND c.ID_DOCTOR = ?
         ORDER BY c.FECHA_CITA ASC
       `, [usuario.ID_USUARIO]);
       citas = rows;
     }
 
-    const { rows: doctores } = await pool.query(`
+    const [doctores] = await pool.query(`
       SELECT 
         u.ID_USUARIO AS ID_DOCTOR,
         u.NOMBRE_USUARIO AS NOMBRE,
-        STRING_AGG(DISTINCT COALESCE(e.NOMBRE_ESPECIALIDAD, 'Medicina General'), ', ') AS ESPECIALIDAD,
+        GROUP_CONCAT(DISTINCT COALESCE(e.NOMBRE_ESPECIALIDAD, 'Medicina General') SEPARATOR ', ') AS ESPECIALIDAD,
         u.CORREO_ELECTRONICO
       FROM TBL_MS_USUARIO u
       LEFT JOIN TBL_DOCTOR_ESPECIALIDAD de ON u.ID_USUARIO = de.ID_DOCTOR
@@ -175,7 +196,7 @@ router.get("/api/cita-detalle/:idCita", async (req, res) => {
   const { idCita } = req.params;
 
   try {
-    const { rows: citaRows } = await pool.query(`
+    const [citaRows] = await pool.query(`
       SELECT 
         c.ID_CITA,
         c.ID_PACIENTE,
@@ -194,7 +215,7 @@ router.get("/api/cita-detalle/:idCita", async (req, res) => {
       FROM TBL_CITAS c
       INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
       INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
-      WHERE c.ID_CITA = $1
+      WHERE c.ID_CITA = ?
     `, [idCita]);
 
     if (citaRows.length === 0) {
@@ -223,7 +244,7 @@ router.get("/api/historial-rapido/:idPaciente", async (req, res) => {
   const { idPaciente } = req.params;
 
   try {
-    const { rows: consultas } = await pool.query(`
+    const [consultas] = await pool.query(`
       SELECT 
         cm.ID_CONSULTA,
         cm.FECHA_CONSULTA,
@@ -235,19 +256,19 @@ router.get("/api/historial-rapido/:idPaciente", async (req, res) => {
         u.NOMBRE_USUARIO AS DOCTOR
       FROM TBL_CONSULTA_MEDICA cm
       INNER JOIN TBL_MS_USUARIO u ON cm.ID_DOCTOR = u.ID_USUARIO
-      WHERE cm.ID_PACIENTE = $1
+      WHERE cm.ID_PACIENTE = ?
       ORDER BY cm.FECHA_CONSULTA DESC
       LIMIT 5
     `, [idPaciente]);
 
-    const { rows: historial } = await pool.query(`
+    const [historial] = await pool.query(`
       SELECT 
         ALERGIAS,
         MEDICAMENTOS_ACTUALES,
         ENFERMEDADES_CRONICAS,
         NOTAS_IMPORTANTES
       FROM TBL_HISTORIAL_MEDICO
-      WHERE ID_PACIENTE = $1
+      WHERE ID_PACIENTE = ?
     `, [idPaciente]);
 
     res.json({
@@ -269,7 +290,7 @@ router.get("/api/imprimir-consulta/:idConsulta", async (req, res) => {
   const { idConsulta } = req.params;
 
   try {
-    const { rows } = await pool.query(`
+    const [rows] = await pool.query(`
       SELECT 
         cm.*,
         CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -284,7 +305,7 @@ router.get("/api/imprimir-consulta/:idConsulta", async (req, res) => {
       INNER JOIN TBL_PACIENTE p ON cm.ID_PACIENTE = p.ID_PACIENTE
       INNER JOIN TBL_MS_USUARIO u ON cm.ID_DOCTOR = u.ID_USUARIO
       INNER JOIN TBL_CITAS c ON cm.ID_CITA = c.ID_CITA
-      WHERE cm.ID_CONSULTA = $1
+      WHERE cm.ID_CONSULTA = ?
     `, [idConsulta]);
 
     if (rows.length === 0) {
@@ -300,7 +321,7 @@ router.get("/api/imprimir-consulta/:idConsulta", async (req, res) => {
       try { consulta.EXAMEN_FISICO = JSON.parse(consulta.EXAMEN_FISICO); } catch (e) { consulta.EXAMEN_FISICO = []; }
     }
 
-    const { rows: preclinica } = await pool.query(`
+    const [preclinica] = await pool.query(`
       SELECT 
         TEMPERATURA,
         PRESION_SISTOLICA,
@@ -315,7 +336,7 @@ router.get("/api/imprimir-consulta/:idConsulta", async (req, res) => {
         PERIMETRO_ABDOMINAL,
         ESTADO_GENERAL
       FROM TBL_PRECLINICA
-      WHERE ID_CITA = $1
+      WHERE ID_CITA = ?
       ORDER BY FECHA_REGISTRO DESC
       LIMIT 1
     `, [consulta.ID_CITA]);
@@ -341,7 +362,7 @@ router.get("/api/datos", async (req, res) => {
     let citas = [];
 
     if (usuario && usuario.ROL === 'ADMINISTRADOR') {
-      const { rows } = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT 
           c.ID_CITA,
           CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -351,7 +372,7 @@ router.get("/api/datos", async (req, res) => {
           u.ID_USUARIO AS ID_DOCTOR,
           u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
           c.FECHA_CITA,
-          TO_CHAR(c.FECHA_CITA, 'HH24:MI') AS HORA_CITA,
+          DATE_FORMAT(c.FECHA_CITA, '%H:%i') AS HORA_CITA,
           c.ESTADO,
           c.MOTIVO_CONSULTA,
           c.PRIORIDAD,
@@ -366,7 +387,7 @@ router.get("/api/datos", async (req, res) => {
       `);
       citas = rows;
     } else if (usuario && usuario.ROL === 'DOCTOR') {
-      const { rows } = await pool.query(`
+      const [rows] = await pool.query(`
         SELECT 
           c.ID_CITA,
           CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
@@ -376,7 +397,7 @@ router.get("/api/datos", async (req, res) => {
           u.ID_USUARIO AS ID_DOCTOR,
           u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
           c.FECHA_CITA,
-          TO_CHAR(c.FECHA_CITA, 'HH24:MI') AS HORA_CITA,
+          DATE_FORMAT(c.FECHA_CITA, '%H:%i') AS HORA_CITA,
           c.ESTADO,
           c.MOTIVO_CONSULTA,
           c.PRIORIDAD,
@@ -387,18 +408,18 @@ router.get("/api/datos", async (req, res) => {
         INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
         INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
         WHERE c.ESTADO IN ('CONSULTA_MEDICA', 'PRECLINICA')
-          AND c.ID_DOCTOR = $1
+          AND c.ID_DOCTOR = ?
         ORDER BY c.FECHA_CITA ASC
       `, [usuario.ID_USUARIO]);
       citas = rows;
     }
 
-    const { rows: doctores } = await pool.query(`
+    const [doctores] = await pool.query(`
       SELECT 
         u.ID_USUARIO,
         u.NOMBRE_USUARIO,
         u.CORREO_ELECTRONICO,
-        STRING_AGG(DISTINCT COALESCE(e.NOMBRE_ESPECIALIDAD, 'Medicina General'), ', ') AS ESPECIALIDAD
+        GROUP_CONCAT(DISTINCT COALESCE(e.NOMBRE_ESPECIALIDAD, 'Medicina General') SEPARATOR ', ') AS ESPECIALIDAD
       FROM TBL_MS_USUARIO u
       LEFT JOIN TBL_DOCTOR_ESPECIALIDAD de ON u.ID_USUARIO = de.ID_DOCTOR
       LEFT JOIN TBL_ESPECIALIDADES e ON de.ID_ESPECIALIDAD = e.ID_ESPECIALIDAD
@@ -408,14 +429,14 @@ router.get("/api/datos", async (req, res) => {
       ORDER BY u.NOMBRE_USUARIO
     `);
 
-    const { rows: pacientes } = await pool.query(`
+    const [pacientes] = await pool.query(`
       SELECT ID_PACIENTE, NOMBRES, APELLIDOS, TELEFONO, CORREO_ELECTRONICO
       FROM TBL_PACIENTE
       WHERE ESTADO = 'ACTIVO'
       ORDER BY NOMBRES, APELLIDOS
     `);
 
-    const { rows: consultasExistentes } = await pool.query(`
+    const [consultasExistentes] = await pool.query(`
       SELECT ID_CONSULTA, ID_CITA 
       FROM TBL_CONSULTA_MEDICA
     `);
@@ -451,9 +472,9 @@ router.get("/api/datos", async (req, res) => {
 // POST /nueva - Crear o actualizar consulta (UPSERT)
 // ============================================================
 router.post("/nueva", async (req, res) => {
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
 
     const body = req.body;
     console.log("📥 Body recibido en /nueva (UPSERT):", JSON.stringify(body, null, 2));
@@ -461,24 +482,23 @@ router.post("/nueva", async (req, res) => {
     const idCita = body.idCita || body.citaId || body.ID_CITA;
     let idPaciente = body.idPaciente || body.pacienteId || body.ID_PACIENTE;
     let idDoctor = body.idDoctor || body.doctorId || body.ID_DOCTOR;
-    const idConsultaEnviado = body.idConsulta || body.ID_CONSULTA || null;
 
     if (idCita && (!idPaciente || !idDoctor)) {
-      const { rows: citaData } = await client.query(
-        "SELECT ID_PACIENTE, ID_DOCTOR FROM TBL_CITAS WHERE ID_CITA = $1",
+      const [citaData] = await connection.query(
+        "SELECT ID_PACIENTE, ID_DOCTOR FROM TBL_CITAS WHERE ID_CITA = ?",
         [idCita]
       );
       if (citaData.length > 0) {
         if (!idPaciente) idPaciente = citaData[0].ID_PACIENTE;
         if (!idDoctor) idDoctor = citaData[0].ID_DOCTOR;
       } else {
-        await client.query('ROLLBACK');
+        await connection.rollback();
         return res.status(404).json({ success: false, error: "La cita no existe" });
       }
     }
 
     if (!idCita || !idPaciente || !idDoctor) {
-      await client.query('ROLLBACK');
+      await connection.rollback();
       return res.status(400).json({
         success: false,
         error: "Faltan campos obligatorios: idCita, idPaciente, idDoctor",
@@ -489,17 +509,17 @@ router.post("/nueva", async (req, res) => {
     const usuarioCreacion = req.user?.USUARIO || 'SISTEMA';
 
     // Verificar si la cita está en estado cancelado o no asistió
-    const { rows: citaExists } = await client.query(
-      "SELECT ID_CITA, ESTADO FROM TBL_CITAS WHERE ID_CITA = $1",
+    const [citaExists] = await connection.query(
+      "SELECT ID_CITA, ESTADO FROM TBL_CITAS WHERE ID_CITA = ?",
       [idCita]
     );
     if (citaExists.length === 0) {
-      await client.query('ROLLBACK');
+      await connection.rollback();
       return res.status(404).json({ success: false, error: "La cita no existe" });
     }
     const estadoCita = String(citaExists[0].ESTADO || "").toUpperCase();
     if (estadoCita === "CANCELADA" || estadoCita === "NO_ASISTIO") {
-      await client.query('ROLLBACK');
+      await connection.rollback();
       return res.status(400).json({
         success: false,
         error: `No se puede crear/editar consulta para una cita en estado "${estadoCita}".`
@@ -521,8 +541,8 @@ router.post("/nueva", async (req, res) => {
     const proximaCita = body.proximaCita || body.PROXIMA_CITA_RECOMENDADA || null;
 
     // --- Verificar si ya existe consulta para esta cita ---
-    const { rows: consultaExistente } = await client.query(
-      "SELECT ID_CONSULTA FROM TBL_CONSULTA_MEDICA WHERE ID_CITA = $1",
+    const [consultaExistente] = await connection.query(
+      "SELECT ID_CONSULTA FROM TBL_CONSULTA_MEDICA WHERE ID_CITA = ?",
       [idCita]
     );
     let idConsulta = null;
@@ -530,16 +550,16 @@ router.post("/nueva", async (req, res) => {
     if (consultaExistente.length > 0) {
       // ✅ ACTUALIZAR consulta existente
       idConsulta = consultaExistente[0].ID_CONSULTA;
-      await client.query(
+      await connection.query(
         `
         UPDATE TBL_CONSULTA_MEDICA SET
-          MOTIVO_CONSULTA = $1, SINTOMAS = $2, EXAMEN_FISICO = $3,
-          DIAGNOSTICO_PRINCIPAL = $4, CODIGO_CIE10_PRINCIPAL = $5,
-          DIAGNOSTICO_SECUNDARIO = $6, CODIGO_CIE10_SECUNDARIO = $7,
-          TRATAMIENTO = $8, RECOMENDACIONES = $9, OBSERVACIONES = $10,
-          PROXIMA_CITA_RECOMENDADA = $11, TIPO_CONSULTA = $12,
-          USUARIO_MODIFICACION = $13
-        WHERE ID_CONSULTA = $14
+          MOTIVO_CONSULTA = ?, SINTOMAS = ?, EXAMEN_FISICO = ?,
+          DIAGNOSTICO_PRINCIPAL = ?, CODIGO_CIE10_PRINCIPAL = ?,
+          DIAGNOSTICO_SECUNDARIO = ?, CODIGO_CIE10_SECUNDARIO = ?,
+          TRATAMIENTO = ?, RECOMENDACIONES = ?, OBSERVACIONES = ?,
+          PROXIMA_CITA_RECOMENDADA = ?, TIPO_CONSULTA = ?,
+          USUARIO_MODIFICACION = ?
+        WHERE ID_CONSULTA = ?
         `,
         [
           motivoConsulta,
@@ -561,15 +581,14 @@ router.post("/nueva", async (req, res) => {
       console.log(`✅ Consulta #${idConsulta} actualizada para cita #${idCita}`);
     } else {
       // ✅ CREAR nueva consulta
-      const { rows: result } = await client.query(
+      const [result] = await connection.query(
         `
         INSERT INTO TBL_CONSULTA_MEDICA (
           ID_CITA, ID_PACIENTE, ID_DOCTOR, MOTIVO_CONSULTA, SINTOMAS, EXAMEN_FISICO,
           DIAGNOSTICO_PRINCIPAL, CODIGO_CIE10_PRINCIPAL, DIAGNOSTICO_SECUNDARIO,
           CODIGO_CIE10_SECUNDARIO, TRATAMIENTO, RECOMENDACIONES, OBSERVACIONES,
           FECHA_CONSULTA, PROXIMA_CITA_RECOMENDADA, TIPO_CONSULTA, USUARIO_CREACION
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, $14, $15, $16)
-        RETURNING ID_CONSULTA
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
         `,
         [
           idCita, idPaciente, idDoctor, motivoConsulta,
@@ -580,31 +599,31 @@ router.post("/nueva", async (req, res) => {
           proximaCita, tipoConsulta, usuarioCreacion
         ]
       );
-      idConsulta = result[0].ID_CONSULTA;
+      idConsulta = result.insertId;
       console.log(`✅ Nueva consulta #${idConsulta} creada para cita #${idCita}`);
     }
 
     // --- Actualizar estado de la cita si estaba en PRECLINICA ---
     if (estadoCita === "PRECLINICA") {
-      await client.query(
+      await connection.query(
         `
         UPDATE TBL_CITAS 
         SET ESTADO = 'CONSULTA_MEDICA', 
-            USUARIO_MODIFICACION = $1,
+            USUARIO_MODIFICACION = ?,
             FECHA_MODIFICACION = NOW()
-        WHERE ID_CITA = $2
+        WHERE ID_CITA = ?
         `,
         [usuarioCreacion, idCita]
       );
       console.log(`🔄 Cita #${idCita} actualizada de PRECLINICA a CONSULTA_MEDICA`);
     } else {
       // Solo actualizar FECHA_MODIFICACION
-      await client.query(
+      await connection.query(
         `
         UPDATE TBL_CITAS 
-        SET USUARIO_MODIFICACION = $1,
+        SET USUARIO_MODIFICACION = ?,
             FECHA_MODIFICACION = NOW()
-        WHERE ID_CITA = $2
+        WHERE ID_CITA = ?
         `,
         [usuarioCreacion, idCita]
       );
@@ -613,9 +632,8 @@ router.post("/nueva", async (req, res) => {
     // ============================================================
     // GUARDAR MEDICAMENTOS (borrar y recrear)
     // ============================================================
-    // Eliminar prescripciones existentes para esta consulta
-    await client.query(
-      "DELETE FROM TBL_PRESCRIPCION WHERE ID_CONSULTA = $1",
+    await connection.query(
+      "DELETE FROM TBL_PRESCRIPCION WHERE ID_CONSULTA = ?",
       [idConsulta]
     );
 
@@ -624,12 +642,12 @@ router.post("/nueva", async (req, res) => {
       for (const med of body.medicamentos) {
         const idMed = await getOrCreateMedicamento(med.nombre, usuarioCreacion);
         if (idMed) {
-          await client.query(
+          await connection.query(
             `
             INSERT INTO TBL_PRESCRIPCION (
               ID_CONSULTA, ID_MEDICAMENTO, DOSIS, FRECUENCIA, DURACION,
               INSTRUCCIONES_ADICIONALES, ESTADO, USUARIO_CREACION
-            ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVA', $7)
+            ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVA', ?)
             `,
             [
               idConsulta,
@@ -694,36 +712,33 @@ router.post("/nueva", async (req, res) => {
       if (VACUNAS !== undefined) historialUpdates.VACUNAS = JSON.stringify(toArray(VACUNAS));
       if (NOTAS_IMPORTANTES !== undefined) historialUpdates.NOTAS_IMPORTANTES = NOTAS_IMPORTANTES;
 
-      const { rows: existeHistorial } = await client.query(
-        "SELECT ID_HISTORIAL FROM TBL_HISTORIAL_MEDICO WHERE ID_PACIENTE = $1",
+      const [existeHistorial] = await connection.query(
+        "SELECT ID_HISTORIAL FROM TBL_HISTORIAL_MEDICO WHERE ID_PACIENTE = ?",
         [idPaciente]
       );
 
       if (existeHistorial.length > 0) {
         const setClauses = [];
         const values = [];
-        let idx = 1;
         for (const [key, value] of Object.entries(historialUpdates)) {
-          setClauses.push(`${key} = $${idx}`);
+          setClauses.push(`${key} = ?`);
           values.push(value);
-          idx++;
         }
         setClauses.push(`FECHA_ACTUALIZACION = CURRENT_TIMESTAMP`);
-        setClauses.push(`USUARIO_MODIFICACION = $${idx}`);
+        setClauses.push(`USUARIO_MODIFICACION = ?`);
         values.push(usuarioCreacion);
-        idx++;
         values.push(idPaciente);
-        await client.query(
-          `UPDATE TBL_HISTORIAL_MEDICO SET ${setClauses.join(', ')} WHERE ID_PACIENTE = $${idx}`,
+        await connection.query(
+          `UPDATE TBL_HISTORIAL_MEDICO SET ${setClauses.join(', ')} WHERE ID_PACIENTE = ?`,
           values
         );
       } else {
         const columnas = ['ID_PACIENTE', ...Object.keys(historialUpdates)];
-        const placeholders = columnas.map((_, i) => `$${i + 1}`).join(', ');
+        const placeholders = columnas.map(() => '?').join(', ');
         const valores = [idPaciente, ...Object.values(historialUpdates)];
-        await client.query(
+        await connection.query(
           `INSERT INTO TBL_HISTORIAL_MEDICO (${columnas.join(', ')}, USUARIO_CREACION, FECHA_ACTUALIZACION)
-           VALUES (${placeholders}, $${valores.length + 1}, CURRENT_TIMESTAMP)`,
+            VALUES (${placeholders}, ?, CURRENT_TIMESTAMP)`,
           [...valores, usuarioCreacion]
         );
       }
@@ -732,8 +747,8 @@ router.post("/nueva", async (req, res) => {
     // ============================================================
     // BITÁCORA
     // ============================================================
-    const { rows: pacienteInfo } = await client.query(
-      "SELECT CONCAT(NOMBRES, ' ', APELLIDOS) AS NOMBRE FROM TBL_PACIENTE WHERE ID_PACIENTE = $1",
+    const [pacienteInfo] = await connection.query(
+      "SELECT CONCAT(NOMBRES, ' ', APELLIDOS) AS NOMBRE FROM TBL_PACIENTE WHERE ID_PACIENTE = ?",
       [idPaciente]
     );
     const nombrePaciente = pacienteInfo.length > 0 ? pacienteInfo[0].NOMBRE : `ID ${idPaciente}`;
@@ -749,7 +764,7 @@ router.post("/nueva", async (req, res) => {
       req: req
     });
 
-    await client.query('COMMIT');
+    await connection.commit();
 
     res.json({
       success: true,
@@ -762,7 +777,7 @@ router.post("/nueva", async (req, res) => {
     });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error("❌ Error en POST /consultaMedica/nueva:", err);
     try {
       await registrarBitacora({
@@ -781,7 +796,7 @@ router.post("/nueva", async (req, res) => {
       error: "Error al guardar la consulta médica: " + err.message
     });
   } finally {
-    client.release();
+    connection.release();
   }
 });
 
@@ -789,9 +804,9 @@ router.post("/nueva", async (req, res) => {
 // POST /actualizar - Actualizar consulta médica (CON FECHA_MODIFICACION Y MEDICAMENTOS)
 // ============================================================
 router.post("/actualizar", async (req, res) => {
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
 
     const body = req.body;
     const idConsulta = body.idConsulta;
@@ -799,31 +814,31 @@ router.post("/actualizar", async (req, res) => {
     console.log(" Body recibido en /actualizar:", JSON.stringify(body, null, 2));
 
     if (!idConsulta) {
-      await client.query('ROLLBACK');
+      await connection.rollback();
       return res.status(400).json({ success: false, error: "ID de consulta requerido" });
     }
 
-    const { rows: consultaExists } = await client.query(
-      "SELECT ID_CONSULTA, ID_CITA FROM TBL_CONSULTA_MEDICA WHERE ID_CONSULTA = $1",
+    const [consultaExists] = await connection.query(
+      "SELECT ID_CONSULTA, ID_CITA FROM TBL_CONSULTA_MEDICA WHERE ID_CONSULTA = ?",
       [idConsulta]
     );
 
     if (consultaExists.length === 0) {
-      await client.query('ROLLBACK');
+      await connection.rollback();
       return res.status(404).json({ success: false, error: "La consulta médica no existe" });
     }
 
     const idCita = consultaExists[0].ID_CITA;
 
-    const { rows: citaData } = await client.query(
-      "SELECT ESTADO FROM TBL_CITAS WHERE ID_CITA = $1",
+    const [citaData] = await connection.query(
+      "SELECT ESTADO FROM TBL_CITAS WHERE ID_CITA = ?",
       [idCita]
     );
 
     if (citaData.length > 0) {
       const estadoCita = String(citaData[0].ESTADO || "").toUpperCase();
       if (estadoCita === "CANCELADA" || estadoCita === "NO_ASISTIO") {
-        await client.query('ROLLBACK');
+        await connection.rollback();
         return res.status(400).json({
           success: false,
           error: `No se puede actualizar la consulta porque la cita está en estado "${estadoCita}".`
@@ -834,14 +849,14 @@ router.post("/actualizar", async (req, res) => {
     const usuarioModificacion = req.user?.NOMBRE_USUARIO || req.user?.USUARIO || 'SISTEMA';
 
     // ✅ 1. ACTUALIZAR CONSULTA
-    await client.query(`
+    await connection.query(`
       UPDATE TBL_CONSULTA_MEDICA SET
-        MOTIVO_CONSULTA = $1, SINTOMAS = $2, EXAMEN_FISICO = $3,
-        DIAGNOSTICO_PRINCIPAL = $4, CODIGO_CIE10_PRINCIPAL = $5,
-        DIAGNOSTICO_SECUNDARIO = $6, CODIGO_CIE10_SECUNDARIO = $7,
-        TRATAMIENTO = $8, RECOMENDACIONES = $9, OBSERVACIONES = $10,
-        TIPO_CONSULTA = $11, USUARIO_MODIFICACION = $12
-      WHERE ID_CONSULTA = $13
+        MOTIVO_CONSULTA = ?, SINTOMAS = ?, EXAMEN_FISICO = ?,
+        DIAGNOSTICO_PRINCIPAL = ?, CODIGO_CIE10_PRINCIPAL = ?,
+        DIAGNOSTICO_SECUNDARIO = ?, CODIGO_CIE10_SECUNDARIO = ?,
+        TRATAMIENTO = ?, RECOMENDACIONES = ?, OBSERVACIONES = ?,
+        TIPO_CONSULTA = ?, USUARIO_MODIFICACION = ?
+      WHERE ID_CONSULTA = ?
     `, [
       body.motivoConsulta || null,
       body.sintomas && body.sintomas.length > 0 ? JSON.stringify(body.sintomas) : null,
@@ -859,17 +874,17 @@ router.post("/actualizar", async (req, res) => {
     ]);
 
     // ✅ 2. MEDICAMENTOS: BORRAR Y RECREAR
-    await client.query("DELETE FROM TBL_PRESCRIPCION WHERE ID_CONSULTA = $1", [idConsulta]);
+    await connection.query("DELETE FROM TBL_PRESCRIPCION WHERE ID_CONSULTA = ?", [idConsulta]);
 
     if (body.medicamentos && Array.isArray(body.medicamentos) && body.medicamentos.length > 0) {
       for (const med of body.medicamentos) {
         const idMed = await getOrCreateMedicamento(med.nombre, usuarioModificacion);
         if (idMed) {
-          await client.query(`
+          await connection.query(`
             INSERT INTO TBL_PRESCRIPCION (
               ID_CONSULTA, ID_MEDICAMENTO, DOSIS, FRECUENCIA, DURACION,
               INSTRUCCIONES_ADICIONALES, ESTADO, USUARIO_CREACION
-            ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVA', $7)
+            ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVA', ?)
           `, [
             idConsulta,
             idMed,
@@ -884,13 +899,13 @@ router.post("/actualizar", async (req, res) => {
     }
 
     // ✅ 3. ACTUALIZAR CITA (FECHA_MODIFICACION)
-    await client.query(`
+    await connection.query(`
       UPDATE TBL_CITAS 
-      SET USUARIO_MODIFICACION = $1, FECHA_MODIFICACION = NOW()
-      WHERE ID_CITA = $2
+      SET USUARIO_MODIFICACION = ?, FECHA_MODIFICACION = NOW()
+      WHERE ID_CITA = ?
     `, [usuarioModificacion, idCita]);
 
-    await client.query('COMMIT');
+    await connection.commit();
 
     await registrarBitacora({
       usuario: usuarioModificacion,
@@ -903,505 +918,15 @@ router.post("/actualizar", async (req, res) => {
       req: req
     });
 
-    res.json({
-      success: true,
-      message: "Consulta médica actualizada exitosamente",
-      idConsulta: idConsulta
-    });
+    res.json({ success: true, message: "Consulta actualizada correctamente" });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error(" Error en POST /consultaMedica/actualizar:", err);
-    res.status(500).json({
-      success: false,
-      error: "Error al actualizar la consulta médica: " + err.message
-    });
+    res.status(500).json({ success: false, error: "Error al actualizar la consulta: " + err.message });
   } finally {
-    client.release();
+    connection.release();
   }
 });
-
-// ============================================================
-// GET /por-cita/:idCita - Obtener consulta por ID de cita
-// ============================================================
-router.get("/por-cita/:idCita", async (req, res) => {
-  const { idCita } = req.params;
-  try {
-    const { rows: consultaRows } = await pool.query(`
-      SELECT 
-        cm.ID_CONSULTA, cm.ID_CITA, cm.ID_PACIENTE, cm.ID_DOCTOR,
-        cm.MOTIVO_CONSULTA, cm.SINTOMAS, cm.EXAMEN_FISICO,
-        cm.DIAGNOSTICO_PRINCIPAL, cm.CODIGO_CIE10_PRINCIPAL,
-        cm.DIAGNOSTICO_SECUNDARIO, cm.CODIGO_CIE10_SECUNDARIO,
-        cm.TRATAMIENTO, cm.RECOMENDACIONES, cm.OBSERVACIONES,
-        cm.FECHA_CONSULTA, cm.PROXIMA_CITA_RECOMENDADA, cm.TIPO_CONSULTA,
-        CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
-        u.NOMBRE_USUARIO AS NOMBRE_DOCTOR
-      FROM TBL_CONSULTA_MEDICA cm
-      INNER JOIN TBL_PACIENTE p ON cm.ID_PACIENTE = p.ID_PACIENTE
-      INNER JOIN TBL_MS_USUARIO u ON cm.ID_DOCTOR = u.ID_USUARIO
-      WHERE cm.ID_CITA = $1
-    `, [idCita]);
-
-    if (consultaRows.length === 0) {
-      return res.status(404).json({ success: false, message: "No se encontró consulta para esta cita" });
-    }
-
-    const consulta = consultaRows[0];
-    if (consulta.SINTOMAS && typeof consulta.SINTOMAS === 'string') {
-      try { consulta.SINTOMAS = JSON.parse(consulta.SINTOMAS); } catch (e) { consulta.SINTOMAS = []; }
-    }
-    if (consulta.EXAMEN_FISICO && typeof consulta.EXAMEN_FISICO === 'string') {
-      try { consulta.EXAMEN_FISICO = JSON.parse(consulta.EXAMEN_FISICO); } catch (e) { consulta.EXAMEN_FISICO = []; }
-    }
-
-    res.json({ success: true, consulta: consulta });
-
-  } catch (err) {
-    console.error(" Error en GET /consultaMedica/por-cita/:idCita:", err);
-    res.status(500).json({ success: false, error: "Error al obtener consulta por cita: " + err.message });
-  }
-});
-
-// ============================================================
-// GET /preclinica/por-cita/:idCita - Obtener preclínica
-// ============================================================
-router.get("/preclinica/por-cita/:idCita", async (req, res) => {
-  const { idCita } = req.params;
-  try {
-    const { rows: preclinicaRows } = await pool.query(`
-      SELECT * FROM TBL_PRECLINICA WHERE ID_CITA = $1 ORDER BY FECHA_REGISTRO DESC LIMIT 1
-    `, [idCita]);
-
-    if (preclinicaRows.length === 0) {
-      return res.status(404).json({ success: false, message: "No se encontró preclínica para esta cita" });
-    }
-
-    res.json({ success: true, preclinica: preclinicaRows[0] });
-
-  } catch (err) {
-    console.error(" Error en GET /consultaMedica/preclinica/por-cita/:idCita:", err);
-    res.status(500).json({ success: false, error: "Error al obtener preclínica por cita: " + err.message });
-  }
-});
-
-// ============================================================
-// GET /api/cita/:idCita - Obtener cita con preclínica e historial
-// ============================================================
-router.get("/api/cita/:idCita", async (req, res) => {
-  const { idCita } = req.params;
-  try {
-    const { rows: citaRows } = await pool.query(`
-      SELECT 
-        c.ID_CITA, c.ID_PACIENTE, c.ID_DOCTOR, c.FECHA_CITA, c.ESTADO,
-        c.MOTIVO_CONSULTA, c.PRIORIDAD, c.TIPO_CITA, c.DURACION_ESTIMADA_MIN,
-        c.OBSERVACIONES, CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
-        p.FECHA_NACIMIENTO, p.GENERO, p.TELEFONO, p.CORREO_ELECTRONICO,
-        p.DIRECCION, u.NOMBRE_USUARIO AS NOMBRE_DOCTOR
-      FROM TBL_CITAS c
-      INNER JOIN TBL_PACIENTE p ON c.ID_PACIENTE = p.ID_PACIENTE
-      INNER JOIN TBL_MS_USUARIO u ON c.ID_DOCTOR = u.ID_USUARIO
-      WHERE c.ID_CITA = $1
-    `, [idCita]);
-
-    if (citaRows.length === 0) {
-      return res.status(404).json({ error: "Cita no encontrada" });
-    }
-
-    const cita = citaRows[0];
-
-    const { rows: preclinicaRows } = await pool.query(`
-      SELECT * FROM TBL_PRECLINICA WHERE ID_CITA = $1 ORDER BY FECHA_REGISTRO DESC LIMIT 1
-    `, [idCita]);
-
-    const { rows: historialRows } = await pool.query(`
-      SELECT ALERGIAS, ENFERMEDADES_CRONICAS, CIRUGIAS_PREVIAS,
-        MEDICAMENTOS_ACTUALES, ANTECEDENTES_FAMILIARES, HABITOS,
-        VACUNAS, NOTAS_IMPORTANTES
-      FROM TBL_HISTORIAL_MEDICO WHERE ID_PACIENTE = $1
-    `, [cita.ID_PACIENTE]);
-
-    const { rows: consultasPrevias } = await pool.query(`
-      SELECT ID_CONSULTA, FECHA_CONSULTA, DIAGNOSTICO_PRINCIPAL,
-        TRATAMIENTO, u.NOMBRE_USUARIO AS DOCTOR
-      FROM TBL_CONSULTA_MEDICA cm
-      INNER JOIN TBL_MS_USUARIO u ON cm.ID_DOCTOR = u.ID_USUARIO
-      WHERE cm.ID_PACIENTE = $1
-      ORDER BY cm.FECHA_CONSULTA DESC LIMIT 5
-    `, [cita.ID_PACIENTE]);
-
-    res.json({
-      success: true,
-      cita: cita,
-      preclinica: preclinicaRows.length > 0 ? preclinicaRows[0] : null,
-      historial: historialRows.length > 0 ? historialRows[0] : null,
-      consultasPrevias: consultasPrevias || []
-    });
-
-  } catch (err) {
-    console.error(" Error en GET /api/cita/:idCita:", err);
-    res.status(500).json({ error: "Error al obtener datos de la cita" });
-  }
-});
-
-// ============================================================
-// GET /api/consulta/:idConsulta - Obtener consulta específica CON PRECLÍNICA
-// ============================================================
-router.get("/api/consulta/:idConsulta", async (req, res) => {
-  const { idConsulta } = req.params;
-  try {
-    const { rows } = await pool.query(`
-      SELECT cm.*, 
-             CONCAT(p.NOMBRES, ' ', p.APELLIDOS) AS NOMBRE_PACIENTE,
-             u.NOMBRE_USUARIO AS NOMBRE_DOCTOR,
-             pre.TEMPERATURA, pre.PRESION_SISTOLICA, pre.PRESION_DIASTOLICA,
-             pre.FRECUENCIA_CARDIACA, pre.FRECUENCIA_RESPIRATORIA,
-             pre.SATURACION_OXIGENO, pre.PESO, pre.TALLA, pre.GLUCOSA,
-             pre.PERIMETRO_ABDOMINAL, pre.ESTADO_GENERAL,
-             pre.OBSERVACIONES AS PRECLINICA_OBSERVACIONES
-      FROM TBL_CONSULTA_MEDICA cm
-      INNER JOIN TBL_PACIENTE p ON cm.ID_PACIENTE = p.ID_PACIENTE
-      INNER JOIN TBL_MS_USUARIO u ON cm.ID_DOCTOR = u.ID_USUARIO
-      LEFT JOIN TBL_PRECLINICA pre ON cm.ID_CITA = pre.ID_CITA
-      WHERE cm.ID_CONSULTA = $1
-    `, [idConsulta]);
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Consulta no encontrada" });
-    }
-
-    const consulta = rows[0];
-    if (consulta.SINTOMAS && typeof consulta.SINTOMAS === 'string') {
-      try { consulta.SINTOMAS = JSON.parse(consulta.SINTOMAS); } catch (e) { consulta.SINTOMAS = []; }
-    }
-    if (consulta.EXAMEN_FISICO && typeof consulta.EXAMEN_FISICO === 'string') {
-      try { consulta.EXAMEN_FISICO = JSON.parse(consulta.EXAMEN_FISICO); } catch (e) { consulta.EXAMEN_FISICO = []; }
-    }
-
-    // Construir objeto preclinica
-    consulta.preclinica = {
-      temperatura: consulta.TEMPERATURA,
-      presionSistolica: consulta.PRESION_SISTOLICA,
-      presionDiastolica: consulta.PRESION_DIASTOLICA,
-      frecuenciaCardiaca: consulta.FRECUENCIA_CARDIACA,
-      frecuenciaRespiratoria: consulta.FRECUENCIA_RESPIRATORIA,
-      saturacionOxigeno: consulta.SATURACION_OXIGENO,
-      peso: consulta.PESO,
-      talla: consulta.TALLA,
-      glucosa: consulta.GLUCOSA,
-      perimetroAbdominal: consulta.PERIMETRO_ABDOMINAL,
-      estadoGeneral: consulta.ESTADO_GENERAL,
-      observaciones: consulta.PRECLINICA_OBSERVACIONES
-    };
-
-    // Eliminar campos de preclínica del objeto principal (para no duplicar)
-    delete consulta.TEMPERATURA;
-    delete consulta.PRESION_SISTOLICA;
-    delete consulta.PRESION_DIASTOLICA;
-    delete consulta.FRECUENCIA_CARDIACA;
-    delete consulta.FRECUENCIA_RESPIRATORIA;
-    delete consulta.SATURACION_OXIGENO;
-    delete consulta.PESO;
-    delete consulta.TALLA;
-    delete consulta.GLUCOSA;
-    delete consulta.PERIMETRO_ABDOMINAL;
-    delete consulta.ESTADO_GENERAL;
-    delete consulta.PRECLINICA_OBSERVACIONES;
-
-    res.json(consulta);
-
-  } catch (err) {
-    console.error(" Error en GET /api/consulta/:idConsulta:", err);
-    res.status(500).json({ error: "Error al obtener consulta" });
-  }
-});
-
-// ============================================================
-// PUT /api/consulta/:idConsulta - Actualizar consulta (API REST)
-// ============================================================
-router.put("/api/consulta/:idConsulta", async (req, res) => {
-  const { idConsulta } = req.params;
-  const datos = req.body;
-
-  try {
-    const usuarioModificacion = req.user?.USUARIO || 'SISTEMA';
-
-    await pool.query(`
-      UPDATE TBL_CONSULTA_MEDICA SET
-        MOTIVO_CONSULTA = $1, SINTOMAS = $2, EXAMEN_FISICO = $3,
-        DIAGNOSTICO_PRINCIPAL = $4, CODIGO_CIE10_PRINCIPAL = $5,
-        DIAGNOSTICO_SECUNDARIO = $6, CODIGO_CIE10_SECUNDARIO = $7,
-        TRATAMIENTO = $8, RECOMENDACIONES = $9, OBSERVACIONES = $10,
-        PROXIMA_CITA_RECOMENDADA = $11, TIPO_CONSULTA = $12,
-        USUARIO_MODIFICACION = $13
-      WHERE ID_CONSULTA = $14
-    `, [
-      datos.MOTIVO_CONSULTA || null,
-      datos.SINTOMAS ? JSON.stringify(datos.SINTOMAS) : null,
-      datos.EXAMEN_FISICO ? JSON.stringify(datos.EXAMEN_FISICO) : null,
-      datos.DIAGNOSTICO_PRINCIPAL || null,
-      datos.CODIGO_CIE10_PRINCIPAL || null,
-      datos.DIAGNOSTICO_SECUNDARIO || null,
-      datos.CODIGO_CIE10_SECUNDARIO || null,
-      datos.TRATAMIENTO || null,
-      datos.RECOMENDACIONES || null,
-      datos.OBSERVACIONES || null,
-      datos.PROXIMA_CITA_RECOMENDADA || null,
-      datos.TIPO_CONSULTA || 'GENERAL',
-      usuarioModificacion,
-      idConsulta
-    ]);
-
-    res.json({ success: true, message: "Consulta médica actualizada exitosamente" });
-
-  } catch (err) {
-    console.error(" Error en PUT /api/consulta/:idConsulta:", err);
-    res.status(500).json({ error: "Error al actualizar consulta" });
-  }
-});
-
-// ============================================================
-// GET /api/historial/:idPaciente - Obtener historial médico
-// ============================================================
-router.get("/api/historial/:idPaciente", async (req, res) => {
-  const { idPaciente } = req.params;
-  try {
-    const { rows: historialRows } = await pool.query(`
-      SELECT ALERGIAS, ENFERMEDADES_CRONICAS, CIRUGIAS_PREVIAS,
-        MEDICAMENTOS_ACTUALES, ANTECEDENTES_FAMILIARES, HABITOS,
-        VACUNAS, NOTAS_IMPORTANTES, FECHA_ACTUALIZACION
-      FROM TBL_HISTORIAL_MEDICO WHERE ID_PACIENTE = $1
-    `, [idPaciente]);
-
-    res.json({
-      success: true,
-      historial: historialRows.length > 0 ? historialRows[0] : null
-    });
-
-  } catch (err) {
-    console.error(" Error en GET /api/historial/:idPaciente:", err);
-    res.status(500).json({ error: "Error al obtener historial" });
-  }
-});
-
-// ============================================================
-// POST /api/historial/:idPaciente - Guardar/actualizar historial
-// ============================================================
-router.post("/api/historial/:idPaciente", async (req, res) => {
-  const { idPaciente } = req.params;
-  const datos = req.body;
-
-  try {
-    const usuarioModificacion = req.user?.USUARIO || 'SISTEMA';
-
-    const { rows: existe } = await pool.query(
-      "SELECT ID_HISTORIAL FROM TBL_HISTORIAL_MEDICO WHERE ID_PACIENTE = $1",
-      [idPaciente]
-    );
-
-    const toArray = (value) => {
-      if (!value) return [];
-      if (Array.isArray(value)) return value;
-      if (typeof value === 'string') {
-        if (value.startsWith('[')) {
-          try { return JSON.parse(value); } catch { return []; }
-        }
-        return value.split(',').map(item => item.trim()).filter(item => item !== '');
-      }
-      return [];
-    };
-
-    if (existe.length > 0) {
-      await pool.query(`
-        UPDATE TBL_HISTORIAL_MEDICO SET
-          ALERGIAS = $1, ENFERMEDADES_CRONICAS = $2, CIRUGIAS_PREVIAS = $3,
-          MEDICAMENTOS_ACTUALES = $4, ANTECEDENTES_FAMILIARES = $5,
-          HABITOS = $6, VACUNAS = $7, NOTAS_IMPORTANTES = $8,
-          FECHA_ACTUALIZACION = CURRENT_TIMESTAMP, USUARIO_MODIFICACION = $9
-        WHERE ID_PACIENTE = $10
-      `, [
-        JSON.stringify(toArray(datos.ALERGIAS)),
-        JSON.stringify(toArray(datos.ENFERMEDADES_CRONICAS)),
-        JSON.stringify(toArray(datos.CIRUGIAS_PREVIAS)),
-        JSON.stringify(toArray(datos.MEDICAMENTOS_ACTUALES)),
-        JSON.stringify(toArray(datos.ANTECEDENTES_FAMILIARES)),
-        JSON.stringify(toArray(datos.HABITOS)),
-        JSON.stringify(toArray(datos.VACUNAS)),
-        datos.NOTAS_IMPORTANTES || '',
-        usuarioModificacion,
-        idPaciente
-      ]);
-    } else {
-      await pool.query(`
-        INSERT INTO TBL_HISTORIAL_MEDICO (
-          ID_PACIENTE, ALERGIAS, ENFERMEDADES_CRONICAS, CIRUGIAS_PREVIAS,
-          MEDICAMENTOS_ACTUALES, ANTECEDENTES_FAMILIARES, HABITOS, VACUNAS,
-          NOTAS_IMPORTANTES, USUARIO_CREACION, FECHA_ACTUALIZACION
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
-      `, [
-        idPaciente,
-        JSON.stringify(toArray(datos.ALERGIAS)),
-        JSON.stringify(toArray(datos.ENFERMEDADES_CRONICAS)),
-        JSON.stringify(toArray(datos.CIRUGIAS_PREVIAS)),
-        JSON.stringify(toArray(datos.MEDICAMENTOS_ACTUALES)),
-        JSON.stringify(toArray(datos.ANTECEDENTES_FAMILIARES)),
-        JSON.stringify(toArray(datos.HABITOS)),
-        JSON.stringify(toArray(datos.VACUNAS)),
-        datos.NOTAS_IMPORTANTES || '',
-        usuarioModificacion
-      ]);
-    }
-
-    res.json({ success: true, message: "Historial médico actualizado correctamente" });
-
-  } catch (err) {
-    console.error(" Error en POST /api/historial/:idPaciente:", err);
-    res.status(500).json({ error: "Error al guardar historial: " + err.message });
-  }
-});
-
-// ============================================================
-// GET /api/preclinica/:idCita - Obtener preclínica por cita
-// ============================================================
-router.get("/api/preclinica/:idCita", async (req, res) => {
-  const { idCita } = req.params;
-  try {
-    const { rows } = await pool.query(`
-      SELECT * FROM TBL_PRECLINICA WHERE ID_CITA = $1 ORDER BY FECHA_REGISTRO DESC LIMIT 1
-    `, [idCita]);
-
-    res.json({ success: true, preclinica: rows.length > 0 ? rows[0] : null });
-
-  } catch (err) {
-    console.error(" Error en GET /api/preclinica/:idCita:", err);
-    res.status(500).json({ error: "Error al obtener preclínica" });
-  }
-});
-
-// ============================================================
-// POST /api/cambiar-estado - Cambiar estado de la cita
-// ============================================================
-router.post("/api/cambiar-estado", async (req, res) => {
-  const { idCita, nuevoEstado } = req.body;
-
-  if (!idCita || !nuevoEstado) {
-    return res.status(400).json({ success: false, error: "Faltan parámetros: idCita, nuevoEstado" });
-  }
-
-  try {
-    const usuarioModificacion = req.user?.USUARIO || 'SISTEMA';
-
-    await pool.query(`
-      UPDATE TBL_CITAS SET 
-        ESTADO = $1,
-        USUARIO_MODIFICACION = $2,
-        FECHA_MODIFICACION = NOW()
-      WHERE ID_CITA = $3
-    `, [nuevoEstado, usuarioModificacion, idCita]);
-
-    await registrarBitacora({
-      usuario: usuarioModificacion,
-      accion: "CAMBIO_ESTADO_CITA",
-      descripcion: `El usuario ${usuarioModificacion} actualizó el estado de la cita #${idCita} a: '${nuevoEstado}' desde Consulta Médica`,
-      modulo: "CONSULTA_MEDICA",
-      idRegistro: idCita,
-      tabla: "TBL_CITAS",
-      estado: "EXITO",
-      req: req
-    });
-
-    res.json({ success: true, message: `Cita cambiada a estado: ${nuevoEstado}` });
-
-  } catch (err) {
-    console.error(" Error en POST /api/cambiar-estado:", err);
-    res.status(500).json({ error: "Error al cambiar estado de la cita" });
-  }
-});
-
-// ============================================================
-// POST /auto-cerrar - Ejecutar auto-cierre manualmente (CON LOGS)
-// ============================================================
-router.post("/auto-cerrar", async (req, res) => {
-  try {
-    const usuario = req.user || null;
-    if (!usuario || usuario.ROL !== 'ADMINISTRADOR') {
-      return res.status(403).json({ success: false, error: "No tienes permiso para ejecutar esta acción" });
-    }
-
-    const { horasInactividad = 1 } = req.body;
-    const scheduler = require('../services/scheduler.service');
-    const resultado = await scheduler.ejecutarManual({
-      horasInactividad: Number(horasInactividad),
-      cerrarAlFinalDelDia: false
-    });
-
-    res.json(resultado);
-  } catch (err) {
-    console.error(" Error en POST /consultaMedica/auto-cerrar:", err);
-    res.status(500).json({ success: false, error: "Error al ejecutar auto-cierre: " + err.message });
-  }
-});
-
-// ============================================================
-// GET /test-auto-cerrar - Ruta de prueba (SIN autenticación)
-// ============================================================
-router.get("/test-auto-cerrar", async (req, res) => {
-  try {
-    const scheduler = require('../services/scheduler.service');
-    const resultado = await scheduler.ejecutarManual({
-      horasInactividad: 1,
-      cerrarAlFinalDelDia: false
-    });
-    res.json(resultado);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ============================================================
-// API: OBTENER MEDICAMENTOS DE CONSULTA
-// ============================================================
-router.get("/api/medicamentos/:idConsulta", async (req, res) => {
-    try {
-        const { idConsulta } = req.params;
-        const { rows } = await pool.query(`
-            SELECT pr.*, m.NOMBRE_MEDICAMENTO, m.NOMBRE_GENERICO, m.PRESENTACION
-            FROM TBL_PRESCRIPCION pr
-            INNER JOIN TBL_INVENTARIO_MEDICAMENTOS m ON pr.ID_MEDICAMENTO = m.ID_MEDICAMENTO
-            WHERE pr.ID_CONSULTA = $1 AND pr.ESTADO = 'ACTIVA'
-            ORDER BY pr.FECHA_PRESCRIPCION DESC
-        `, [idConsulta]);
-        res.json({ success: true, medicamentos: rows });
-    } catch (err) {
-        console.error("Error en /api/medicamentos:", err);
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// ============================================================
-// FUNCIÓN AUXILIAR: OBTENER O CREAR MEDICAMENTO
-// ============================================================
-async function getOrCreateMedicamento(nombre, usuarioCreacion = 'SISTEMA') {
-    if (!nombre || typeof nombre !== 'string' || nombre.trim() === '') return null;
-    const nombreLimpio = nombre.trim().toUpperCase();
-    const { rows } = await pool.query(
-        `SELECT ID_MEDICAMENTO FROM TBL_INVENTARIO_MEDICAMENTOS 
-         WHERE NOMBRE_MEDICAMENTO = $1 OR NOMBRE_GENERICO = $1`,
-        [nombreLimpio]
-    );
-    if (rows.length > 0) return rows[0].ID_MEDICAMENTO;
-
-    console.log(` Creando nuevo medicamento: "${nombreLimpio}"`);
-    const { rows: result } = await pool.query(`
-        INSERT INTO TBL_INVENTARIO_MEDICAMENTOS (
-            NOMBRE_MEDICAMENTO, NOMBRE_GENERICO,
-            STOCK_ACTUAL, STOCK_MINIMO, STOCK_MAXIMO,
-            PRECIO_COMPRA, PRECIO_VENTA, ESTADO,
-            USUARIO_CREACION, FECHA_REGISTRO
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVO', $8, NOW())
-        RETURNING ID_MEDICAMENTO
-    `, [nombreLimpio, nombreLimpio, 0, 1, 10, 0.00, 0.00, usuarioCreacion]);
-    return result[0].ID_MEDICAMENTO;
-}
 
 module.exports = router;
