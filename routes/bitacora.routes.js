@@ -127,12 +127,12 @@ router.get("/parametros/backup", async (req, res) => {
     const idUsuario = req.user?.ID_USUARIO || null; 
     const nombreUsuario = req.user?.USUARIO || "ADMIN_SYSTEM";
 
-    const dbConfig = {
-      host: process.env.DB_HOST || "localhost",
+   const dbConfig = {
+      host: process.env.DB_HOST,
       port: process.env.DB_PORT || 5432,
-      user: process.env.DB_USER || "postgres",
-      password: process.env.DB_PASSWORD || "postgres",
-      database: process.env.DB_NAME || "Roca_Maya"
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME
     };
 
     // ============================================================
@@ -219,12 +219,13 @@ router.get("/parametros/backup", async (req, res) => {
     // Construir comando pg_dump
     // Usar variables de entorno para la contraseña, o usar .pgpass
     // Para simplificar, se puede usar PGPASSWORD en el entorno
-    const env = { ...process.env };
+   const env = { ...process.env };
     if (dbConfig.password) {
       env.PGPASSWORD = dbConfig.password;
     }
 
-    const comando = `"${rutaPgDump}" -h ${dbConfig.host} -p ${dbConfig.port} -U ${dbConfig.user} -d ${dbConfig.database} --clean --if-exists --inserts > "${rutaTemporalBackup}"`;
+    // Se añade --sslmode=require para permitir conexiones seguras hacia Supabase desde Render
+    const comando = `"${rutaPgDump}" -h ${dbConfig.host} -p ${dbConfig.port} -U ${dbConfig.user} -d ${dbConfig.database} --sslmode=require --clean --if-exists --inserts > "${rutaTemporalBackup}"`;
 
     console.log(`🔄 Ejecutando backup con: ${rutaPgDump}`);
     console.log(`   Comando: ${comando}`);
